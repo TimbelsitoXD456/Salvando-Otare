@@ -1,0 +1,37 @@
+<!-- Pantalla ENTRENAMIENTO: menu.js la carga dentro de #screen-entrenamiento y src/js/entrenamiento.js la controla -->
+<h2>ENTRENAMIENTO</h2>
+<p class="pred-help">La IA prueba variaciones de sus parámetros (cuándo huir, a quién atacar, distancias...) y se queda con las que llegan más lejos, generación tras generación. Las reglas del juego no cambian.</p>
+
+<div class="train-setup">
+  <div class="pred-count" role="group" aria-label="Número de generaciones">
+    <span>Generaciones:</span>
+    <button class="menu-btn train-opt" data-action="train-gens" data-gens="10">10</button>
+    <button class="menu-btn train-opt selected" data-action="train-gens" data-gens="20">20</button>
+    <button class="menu-btn train-opt" data-action="train-gens" data-gens="40">40</button>
+  </div>
+  <p class="pred-status train-start"></p>
+
+  <div class="actions">
+    <button class="menu-btn primary train-run" data-action="train-run">ENTRENAR</button>
+  </div>
+  <div class="actions train-reset-row" hidden>
+    <button class="menu-btn train-reset" data-action="train-reset">Restablecer IA original</button>
+  </div>
+</div>
+
+<div class="pred-progress" hidden>
+  <div class="pred-bar"><div class="pred-bar-fill"></div></div>
+  <p class="pred-status train-status"></p>
+</div>
+
+<div class="train-gens-list"></div>
+<div class="pred-results train-results" aria-live="polite"></div>
+
+<div class="actions train-decision" hidden>
+  <button class="menu-btn primary train-save" data-action="train-save">Guardar IA</button>
+  <button class="menu-btn train-discard" data-action="train-discard">Descartar</button>
+</div>
+
+<div class="actions">
+  <button class="menu-btn" data-action="back-sims">Volver</button>
+</div>

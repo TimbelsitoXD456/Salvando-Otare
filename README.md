@@ -1,2 +1,0 @@
-# Salvando-Otare
-ertcyvubonjmkl,ñ

@@ -1,0 +1,56 @@
+<!-- Pantalla CUENTA: menu.js la carga dentro de #screen-cuenta y src/js/cuenta.js la controla -->
+<h2>CUENTA</h2>
+
+<p class="acct-offline pred-help" hidden>Sin conexión con el servidor de cuentas: juegas como invitado y tu progreso se guarda solo en este navegador.</p>
+
+<!-- Sin sesión: entrar o registrarse -->
+<div class="acct-guest" hidden>
+  <div class="pred-count acct-tabs" role="tablist">
+    <button class="menu-btn acct-tab selected" data-action="acct-tab" data-tab="login" role="tab">Entrar</button>
+    <button class="menu-btn acct-tab" data-action="acct-tab" data-tab="register" role="tab">Registrarse</button>
+  </div>
+
+  <form class="acct-form acct-login" autocomplete="on">
+    <label>Correo<input type="email" name="email" autocomplete="email" required></label>
+    <label>Contraseña<input type="password" name="password" autocomplete="current-password" required minlength="6"></label>
+    <div class="actions"><button class="menu-btn primary" type="submit" data-action="acct-submit">ENTRAR</button></div>
+    <button class="acct-link" type="button" data-action="acct-forgot">¿Olvidaste tu contraseña?</button>
+  </form>
+
+  <form class="acct-form acct-register" autocomplete="on" hidden>
+    <label>Usuario<input type="text" name="username" autocomplete="username" required minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" title="3-20 letras, números o _"></label>
+    <label>Correo<input type="email" name="email" autocomplete="email" required></label>
+    <label>Contraseña<input type="password" name="password" autocomplete="new-password" required minlength="6"></label>
+    <label>Repite la contraseña<input type="password" name="password2" autocomplete="new-password" required minlength="6"></label>
+    <div class="actions"><button class="menu-btn primary" type="submit" data-action="acct-submit">CREAR CUENTA</button></div>
+  </form>
+
+  <p class="pred-help">Sin cuenta también puedes jugar: tu progreso se guarda en este navegador y, si luego creas una cuenta, se suma a ella.</p>
+</div>
+
+<!-- Con sesión -->
+<div class="acct-user" hidden>
+  <p class="acct-hello">Conectado como <b class="acct-name"></b></p>
+  <p class="pred-help acct-email"></p>
+  <div class="pred-stats">
+    <div class="pred-stat"><span class="pred-lanzziano">Lanzziano</span><b class="acct-kills-l">0</b><small>kills</small></div>
+    <div class="pred-stat"><span class="pred-jhoabxi">Jhoabxi</span><b class="acct-kills-j">0</b><small>kills</small></div>
+    <div class="pred-stat"><span>Mejor ronda</span><b class="acct-best">0</b></div>
+  </div>
+  <p class="pred-status acct-sync"></p>
+  <div class="actions"><button class="menu-btn" data-action="acct-logout">Cerrar sesión</button></div>
+</div>
+
+<!-- Desde el enlace de "olvidé mi contraseña" -->
+<form class="acct-form acct-recovery" hidden>
+  <p class="pred-help">Escribe tu nueva contraseña.</p>
+  <label>Nueva contraseña<input type="password" name="password" autocomplete="new-password" required minlength="6"></label>
+  <label>Repítela<input type="password" name="password2" autocomplete="new-password" required minlength="6"></label>
+  <div class="actions"><button class="menu-btn primary" type="submit" data-action="acct-submit">GUARDAR</button></div>
+</form>
+
+<p class="acct-msg" aria-live="polite"></p>
+
+<div class="actions">
+  <button class="menu-btn" data-action="back">Volver</button>
+</div>

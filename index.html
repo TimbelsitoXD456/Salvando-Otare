@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Salvando Otare — Menú</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="src/css/style.css">
+</head>
+<body>
+  <main id="app" class="app-fullscreen" role="application">
+    <!-- Fondo retro (solo decoración): Otare en pixel art al atardecer (src/js/menuBackground.js) y scanlines -->
+    <div class="retro-bg" aria-hidden="true">
+      <canvas class="otare-bg"></canvas>
+    </div>
+    <div class="crt" aria-hidden="true"></div>
+
+    <div class="panel grid">
+      <h1 class="title"><span class="title-main">Salvando<br>Otare</span><span class="title-sub">El Renacer de los Capos</span></h1>
+
+      <section id="screen-menu" class="screen active" role="region" aria-labelledby="menu-title">
+        <h2 id="menu-title" class="visually-hidden">Menú principal</h2>
+        <nav class="menu" aria-label="Menú principal">
+          <button class="menu-btn primary" data-action="play">JUGAR</button>
+          <!-- solo para la cuenta admin (cloud.js / supabase/admin.sql) -->
+          <button class="menu-btn admin-only" data-action="sims" hidden>SIMULACIONES</button>
+          <button class="menu-btn" data-action="kills">KILLS</button>
+          <button class="menu-btn acct-btn" data-action="account">CUENTA</button>
+          <button class="menu-btn" data-action="settings">Ajustes</button>
+          <button class="menu-btn" data-action="credits">Créditos</button>
+        </nav>
+        <p class="hint">Usa ↑ ↓ y Enter para navegar</p>
+        <p class="hint acct-hint"></p>
+      </section>
+
+      <!-- Contenido en src/screens/cuenta.html (lo carga menu.js) -->
+      <section id="screen-cuenta" class="screen" role="dialog" aria-hidden="true"></section>
+
+      <section id="screen-simulaciones" class="screen" role="region" aria-labelledby="sims-title" aria-hidden="true">
+        <h2 id="sims-title">SIMULACIONES</h2>
+        <nav class="menu" aria-label="Simulaciones">
+          <button class="menu-btn" data-action="simulate">Ver simulación</button>
+          <div class="pred-count sim-round" role="group" aria-label="Ronda inicial de la simulación">
+            <span>Desde ronda:</span>
+            <button class="menu-btn sim-round-opt selected" data-action="sim-round" data-round="1">1</button>
+            <button class="menu-btn sim-round-opt" data-action="sim-round" data-round="5">5</button>
+            <button class="menu-btn sim-round-opt" data-action="sim-round" data-round="10">10</button>
+            <button class="menu-btn sim-round-opt" data-action="sim-round" data-round="14">14</button>
+            <button class="menu-btn sim-round-opt" data-action="sim-round" data-round="20">20</button>
+          </div>
+          <button class="menu-btn" data-action="predict">Predicción</button>
+          <button class="menu-btn" data-action="train">Entrenamiento</button>
+          <button class="menu-btn" data-action="back">Volver</button>
+        </nav>
+        <p class="hint sims-ai-status"></p>
+      </section>
+
+      <section id="screen-settings" class="screen" role="dialog" aria-hidden="true">
+        <h2>Ajustes</h2>
+        <label>
+          <span>Volumen</span>
+          <input id="vol-range" type="range" min="0" max="100" value="80">
+        </label>
+        <div class="actions">
+          <button class="menu-btn" data-action="back">Volver</button>
+        </div>
+      </section>
+
+      <!-- Contenido en src/screens/kills.html (lo carga menu.js) -->
+      <section id="screen-kills" class="screen" role="dialog" aria-hidden="true"></section>
+
+      <!-- Contenido en src/screens/prediccion.html (lo carga menu.js) -->
+      <section id="screen-prediccion" class="screen" role="dialog" aria-hidden="true"></section>
+
+      <!-- Contenido en src/screens/entrenamiento.html (lo carga menu.js) -->
+      <section id="screen-entrenamiento" class="screen" role="dialog" aria-hidden="true"></section>
+
+      <section id="screen-credits" class="screen" role="dialog" aria-hidden="true">
+        <h2>Créditos</h2>
+        <p>Creado por @lanzzianoOfficial</p>
+        <div class="actions">
+          <button class="menu-btn" data-action="back">Volver</button>
+        </div>
+      </section>
+
+      <section id="screen-game" class="screen" role="region" aria-hidden="true">
+        <canvas id="gameCanvas"></canvas>
+        <!-- El botón PAUSA se añade dinámicamente cuando arranca el juego -->
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="src/js/menu.js"></script>
+</body>
+</html>

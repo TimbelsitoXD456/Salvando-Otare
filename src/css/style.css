@@ -1,0 +1,496 @@
+/* Estilo neón retro (synthwave arcade): Otare en pixel art al atardecer de fondo, scanlines CRT,
+   título y botones de neón. */
+:root{
+  --bg: #05010d;
+  --accent: #00ffff;          /* cian neón */
+  --pink: #ff2bd6;            /* magenta neón */
+  --orange: #ff8a3d;
+  --yellow: #ffe76a;
+  --text: #c9fbff;
+  --muted: #a9c9e8;
+  --panel: rgba(8,2,24,0.66);
+  --gap: 18px;
+}
+
+*{box-sizing:border-box}
+/* el atributo hidden siempre oculta, aunque la clase del elemento le ponga display:flex */
+[hidden]{ display:none !important; }
+/* oculto a la vista pero legible por lectores de pantalla */
+.visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+/* los <button> no heredan la fuente por defecto: forzar la fuente pixelada */
+button, input{font-family:inherit}
+html,body{height:100%;margin:0;background:var(--bg);font-family:'Press Start 2P',monospace;color:var(--text);-webkit-font-smoothing:antialiased}
+
+/* ---------- marco y fondo ---------- */
+.app-fullscreen{
+  position:fixed;
+  inset:12px;
+  border:3px solid var(--accent);
+  border-radius:6px;
+  overflow:hidden;
+  overflow:clip;   /* que ni el foco de un botón pueda desplazar el marco de lado */
+  /* cielo: noche arriba, violeta en el horizonte (al 60 %) */
+  background: linear-gradient(180deg, #07021a 0%, #160536 38%, #3b0a5c 59%, #120427 60%, #0a0218 100%);
+  box-shadow:
+    0 0 12px var(--accent),
+    0 0 40px rgba(255,43,214,0.35),
+    inset 0 0 30px rgba(0,255,255,0.18);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.retro-bg{ position:absolute; inset:0; z-index:0; pointer-events:none; overflow:hidden; }
+/* Otare en pixel art (384x216 ampliado sin suavizar), anclado abajo para que siempre se vea el pueblo */
+.otare-bg{
+  position:absolute; inset:0;
+  width:100%; height:100%;
+  object-fit:cover;
+  object-position:50% 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+/* scanlines y viñeta de pantalla CRT (debajo del canvas del juego, que tiene z-index 20) */
+.crt{
+  position:absolute; inset:0; z-index:6; pointer-events:none;
+  background:
+    repeating-linear-gradient(180deg, rgba(0,0,0,0.22) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);
+}
+
+/* ---------- distribución: título a la izquierda, pantallas a la derecha ---------- */
+.panel.grid{
+  position:relative; z-index:2;
+  width:100%;
+  height:100%;
+  display:grid;
+  grid-template-columns: minmax(0, 1fr) 480px;
+  gap: 24px;
+  align-items:center;
+  padding: 48px;
+}
+
+/* ---------- título de neón ---------- */
+.title{
+  margin:0;
+  align-self:center;
+  justify-self:start;
+  transform: translateX(6%);
+}
+.title-main{
+  display:block;
+  font-size:clamp(34px, 4.4vw, 64px);   /* se encoge en ventanas estrechas para no desbordar */
+  line-height:1.05;
+  letter-spacing:2px;
+  color:#e6ffff;
+  text-shadow:
+    0 0 4px #fff,
+    0 0 10px var(--accent),
+    0 0 22px var(--accent),
+    0 0 44px #00a2ff,
+    4px 4px 0 var(--pink);
+  animation: neon-flicker 7s infinite;
+}
+.title-sub{
+  display:block;
+  margin-top:22px;
+  font-size:clamp(10px, 1.1vw, 16px);
+  letter-spacing:5px;
+  color:var(--yellow);
+  /* contorno oscuro para que se lea sobre el pueblo del fondo, y el brillo neón */
+  text-shadow:
+    -2px 0 0 #1b0a2a, 2px 0 0 #1b0a2a, 0 -2px 0 #1b0a2a, 0 2px 0 #1b0a2a,
+    0 0 8px var(--orange), 0 0 18px var(--pink);
+}
+/* el título también lleva una sombra oscura por detrás para despegarse del paisaje */
+.title-main{ filter: drop-shadow(0 4px 6px rgba(10,2,24,0.75)); }
+
+/* ---------- pantallas: panel de cristal oscuro con borde neón ---------- */
+.screen{display:none}
+.screen.active{display:block}
+.screen.active:not(#screen-game){
+  background: var(--panel);
+  border:2px solid rgba(0,229,255,0.6);
+  border-radius:6px;
+  padding:28px 22px;
+  box-shadow: 0 0 18px rgba(0,229,255,0.35), inset 0 0 26px rgba(255,43,214,0.12);
+  backdrop-filter: blur(3px);
+}
+.screen h2{
+  text-align:center;
+  color:#ffd6f7;
+  text-shadow: 0 0 6px var(--pink), 0 0 18px var(--pink);
+  font-size:24px;
+  margin:0 0 20px;
+}
+.screen p{ line-height:1.8; font-size:12px; text-align:center; }
+
+/* ---------- menú ---------- */
+.menu{
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+  align-items:center;
+  justify-content:center;
+}
+
+/* botones tipo HUD arcade: borde cian, esquinas magenta, flecha ▶ al seleccionar */
+.menu-btn{
+  position:relative;
+  width:320px;
+  max-width:90%;
+  padding:14px 12px;
+  font-size:16px;
+  letter-spacing:1px;
+  color:var(--text);
+  cursor:pointer;
+  border:2px solid #00e5ff;
+  border-radius:3px;
+  background-color: rgba(8,2,24,0.78);
+  background-image:
+    linear-gradient(var(--pink), var(--pink)), linear-gradient(var(--pink), var(--pink)),
+    linear-gradient(var(--pink), var(--pink)), linear-gradient(var(--pink), var(--pink)),
+    linear-gradient(180deg, rgba(0,255,255,0.10), rgba(255,43,214,0.08));
+  background-size: 12px 2px, 2px 12px, 12px 2px, 2px 12px, 100% 100%;
+  background-position: left top, left top, right bottom, right bottom, 0 0;
+  background-repeat: no-repeat;
+  text-shadow: 0 0 6px rgba(0,255,255,0.85);
+  box-shadow: 0 0 8px rgba(0,229,255,0.55), inset 0 0 10px rgba(0,229,255,0.18);
+  /* crece con un pequeño rebote (curva que se pasa un poco y vuelve) */
+  transition:
+    transform .34s cubic-bezier(.34,1.56,.64,1),
+    box-shadow .3s ease,
+    background-color .25s ease,
+    color .2s ease;
+  overflow:hidden;
+}
+/* flecha que parpadea en el botón seleccionado */
+.menu-btn::before{
+  content:'▶';
+  position:absolute; left:12px; top:50%;
+  transform:translateY(-50%);
+  font-size:0.7em;
+  color:var(--pink);
+  text-shadow: 0 0 6px var(--pink);
+  opacity:0;
+}
+/* destello que cruza el botón al pasar por encima */
+.menu-btn::after{
+  content:'';
+  position:absolute; top:0; left:-60%;
+  width:40%; height:100%;
+  background:linear-gradient(100deg, transparent, rgba(255,255,255,0.35), transparent);
+  transform:skewX(-20deg);
+  pointer-events:none;
+}
+.menu-btn:hover, .menu-btn:focus, .menu-btn.focused{
+  outline:none;
+  color:#fff;
+  background-color: rgba(0,229,255,0.16);
+  transform: scale(1.09);
+  box-shadow:
+    0 0 14px #00e5ff,
+    0 0 34px rgba(255,43,214,0.45),
+    inset 0 0 16px rgba(0,229,255,0.35);
+}
+.menu-btn:hover::before, .menu-btn:focus::before, .menu-btn.focused::before{
+  opacity:1;
+  animation: blink .8s steps(2) infinite;
+}
+.menu-btn:hover::after{ animation: shine .6s ease; }
+.menu-btn:active{ transform: scale(0.97); transition-duration: .08s; }
+/* en filas de opciones pequeñas, crecer menos para no pisar al vecino */
+.pred-count .menu-btn:hover, .pred-count .menu-btn:focus, .pred-count .menu-btn.focused{ transform: scale(1.06); }
+
+/* botón principal (JUGAR, EJECUTAR, ENTRENAR...): magenta-naranja que late */
+.menu-btn.primary{
+  color:#fff;
+  font-size:20px;
+  border-color:var(--yellow);
+  background-image: linear-gradient(90deg, rgba(255,43,214,0.92), rgba(255,138,61,0.92));
+  background-size:100% 100%;
+  text-shadow: 0 0 6px #fff, 0 0 14px var(--pink), 2px 2px 0 rgba(60,0,50,0.8);
+  box-shadow: 0 0 12px var(--pink), 0 0 30px rgba(255,138,61,0.55), inset 0 0 14px rgba(255,255,255,0.25);
+  animation: pulse-glow 1.6s ease-in-out infinite;
+}
+.menu-btn.primary::before{ color:var(--yellow); text-shadow:0 0 6px var(--yellow); }
+.menu-btn.primary:hover, .menu-btn.primary:focus, .menu-btn.primary.focused{
+  background-color: transparent;
+  box-shadow: 0 0 18px var(--pink), 0 0 46px rgba(255,138,61,0.75), inset 0 0 18px rgba(255,255,255,0.35);
+}
+
+/* opción marcada (número de partidas, ronda, IA...) */
+.menu-btn.selected{
+  color:#0a0220;
+  background-color:#00e5ff;
+  text-shadow:none;
+  box-shadow: 0 0 14px #00e5ff, 0 0 28px rgba(0,229,255,0.5);
+}
+.menu-btn:disabled{ opacity:.4; filter:grayscale(0.6); cursor:default; transform:none; animation:none; }
+
+/* texto de ayuda */
+.hint{ color:#9fe8ff; font-size:11px; margin-top:16px; text-align:center; animation: soft-pulse 2s ease-in-out infinite; }
+
+/* ---------- juego y pausa ---------- */
+/* El canvas se mueve para cubrir todo el interior al empezar la partida (menu.js) */
+#screen-game canvas{
+  width:100%;
+  height:calc(100% - 56px);
+  display:block;
+  border-radius:6px;
+  background:#001f10;
+}
+
+#pause-btn{
+  position:absolute;
+  right:22px;
+  top:22px;
+  z-index:100;
+  padding:10px 18px;
+  font-family:'Press Start 2P', monospace;
+  font-size:12px;
+  color:var(--text);
+  background: rgba(8,2,24,0.72);
+  border:2px solid #00e5ff;
+  border-radius:3px;
+  text-shadow: 0 0 6px rgba(0,255,255,0.85);
+  box-shadow: 0 0 10px rgba(0,229,255,0.6);
+  cursor:pointer;
+  transition: transform .1s ease, box-shadow .15s ease;
+}
+#pause-btn:hover{ transform:scale(1.06); box-shadow: 0 0 16px #00e5ff, 0 0 30px rgba(255,43,214,0.5); }
+
+#pause-overlay{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:110;
+  background: rgba(5,0,15,0.55);
+}
+#pause-overlay .panel{
+  width:min(480px, 86%);
+  background: var(--panel);
+  border:2px solid rgba(0,229,255,0.7);
+  border-radius:6px;
+  padding:26px 22px;
+  text-align:center;
+  box-shadow: 0 0 22px rgba(0,229,255,0.45), inset 0 0 26px rgba(255,43,214,0.15);
+}
+#pause-overlay .panel h2{
+  margin:0 0 14px;
+  color:#ffd6f7;
+  text-shadow: 0 0 6px var(--pink), 0 0 18px var(--pink);
+  animation: blink 1.2s steps(2) infinite;
+}
+#pause-overlay .panel .actions{ margin-top:14px; display:flex; gap:12px; justify-content:center; }
+#pause-overlay .menu-btn{ width:auto; min-width:180px; font-size:12px; padding:14px 16px; }
+
+/* ---------- Entrada al juego: círculo negro + cuenta atrás 3, 2, 1, PELIEN (menu.js launchGame) ---------- */
+#intro-fx{ position:absolute; inset:0; z-index:130; pointer-events:none; overflow:hidden; }
+#intro-fx .iris{
+  position:absolute; inset:0; background:#000;
+  clip-path: circle(0% at 50% 50%);
+}
+#intro-fx .iris-ring{
+  position:absolute; left:50%; top:50%;
+  width:0; height:0;
+  transform:translate(-50%,-50%);
+  border-radius:50%;
+  border:4px solid var(--pink);
+  box-shadow: 0 0 18px var(--pink), 0 0 40px var(--accent), inset 0 0 18px var(--pink);
+  opacity:0;
+}
+#intro-fx.cover .iris{ animation: iris-close .6s cubic-bezier(.7,0,.3,1) forwards; }
+#intro-fx.cover .iris-ring{ animation: ring-grow .6s cubic-bezier(.7,0,.3,1) forwards; }
+/* ya en el juego: el negro se desvanece y deja ver la escena congelada */
+/* (el estado final, opacidad 0, no depende de que la animación se ejecute) */
+#intro-fx.reveal .iris{ clip-path: circle(80% at 50% 50%); opacity:0; animation: fade-away .45s ease; }
+#intro-fx.reveal .iris-ring{ display:none; }
+#intro-fx .countdown{
+  position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center;
+}
+#intro-fx .countdown span{
+  font-size:160px;
+  line-height:1;
+  animation: count-pop .8s cubic-bezier(.2,.9,.3,1.2) forwards;
+}
+#intro-fx .countdown .c3{ color:#e6ffff; text-shadow: 0 0 10px var(--accent), 0 0 30px var(--accent), 0 0 60px #00a2ff, 6px 6px 0 var(--pink); }
+#intro-fx .countdown .c2{ color:#ffe0fa; text-shadow: 0 0 10px var(--pink), 0 0 30px var(--pink), 0 0 60px #b000ff, 6px 6px 0 var(--accent); }
+#intro-fx .countdown .c1{ color:#fff8c8; text-shadow: 0 0 10px var(--yellow), 0 0 30px var(--orange), 0 0 60px var(--orange), 6px 6px 0 var(--pink); }
+#intro-fx .countdown .go{
+  font-size:96px;
+  color:#fff;
+  letter-spacing:6px;
+  text-shadow: 0 0 10px #fff, 0 0 24px var(--pink), 0 0 48px var(--orange), 6px 6px 0 var(--accent);
+  animation: pelien-pop 1s cubic-bezier(.2,.9,.3,1.2) forwards;
+}
+
+@keyframes iris-close{ from{ clip-path: circle(0% at 50% 50%); } to{ clip-path: circle(80% at 50% 50%); } }
+@keyframes ring-grow{
+  0%{ width:0; height:0; opacity:1; }
+  100%{ width:170vmax; height:170vmax; opacity:1; }
+}
+@keyframes fade-away{ from{ opacity:1; } to{ opacity:0; } }
+/* cada número entra grande, se asienta y se va encogiendo */
+@keyframes count-pop{
+  0%{ transform:scale(2.6); opacity:0; }
+  22%{ transform:scale(1); opacity:1; }
+  75%{ transform:scale(1); opacity:1; }
+  100%{ transform:scale(0.55); opacity:0; }
+}
+/* PELIEN: golpe con temblor y se desvanece creciendo */
+@keyframes pelien-pop{
+  0%{ transform:scale(3) rotate(-6deg); opacity:0; }
+  18%{ transform:scale(1) rotate(0); opacity:1; }
+  26%{ transform:translate(-6px, 3px); }
+  32%{ transform:translate(6px, -3px); }
+  38%{ transform:translate(0, 0); }
+  75%{ transform:scale(1.05); opacity:1; }
+  100%{ transform:scale(1.6); opacity:0; }
+}
+
+/* ---------- Ajustes ---------- */
+#screen-settings label{ display:flex; flex-direction:column; align-items:center; gap:14px; font-size:13px; margin:10px 0 20px; }
+#screen-settings input[type=range]{ width:80%; accent-color:var(--pink); filter: drop-shadow(0 0 6px var(--pink)); }
+
+/* ---------- Pantalla KILLS (src/screens/kills.html) ---------- */
+#screen-kills h2{ font-size:28px; margin:0 0 24px; }
+.kills-list{ list-style:none; margin:0 auto; padding:0; width:min(420px, 100%); display:flex; flex-direction:column; gap:14px; }
+.kills-row{
+  display:flex; justify-content:space-between; align-items:center; gap:12px;
+  padding:16px 18px;
+  background: rgba(8,2,24,0.7);
+  border:2px solid rgba(0,229,255,0.55);
+  border-radius:4px;
+  box-shadow: 0 0 10px rgba(0,229,255,0.3), inset 0 0 12px rgba(255,43,214,0.1);
+  font-size:14px;
+}
+.kills-count{ color:#fff; white-space:nowrap; text-shadow: 0 0 6px rgba(255,255,255,0.6); }
+/* colores de cada jugador en el juego */
+.kills-lanzziano .kills-name{ color:#ffd400; text-shadow:0 0 8px rgba(255,212,0,0.7); }
+.kills-jhoabxi .kills-name{ color:#6fa8ff; text-shadow:0 0 8px rgba(111,168,255,0.7); }
+
+/* ---------- Pantalla CUENTA (src/screens/cuenta.html) ---------- */
+#screen-cuenta.active{ max-height:calc(100vh - 130px); overflow-y:auto; }
+.acct-tabs{ margin-bottom:16px; }
+.acct-form{ display:flex; flex-direction:column; gap:12px; }
+.acct-form label{ display:flex; flex-direction:column; gap:6px; font-size:9px; color:var(--muted); }
+.acct-form input{
+  font-family:'Press Start 2P', monospace; font-size:11px;
+  padding:10px 12px;
+  color:#fff;
+  background:rgba(8,2,24,0.8);
+  border:2px solid rgba(0,229,255,0.55);
+  border-radius:3px;
+  outline:none;
+  box-shadow: inset 0 0 10px rgba(0,229,255,0.15);
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+.acct-form input:focus{ border-color:var(--pink); box-shadow: 0 0 12px rgba(255,43,214,0.6), inset 0 0 10px rgba(255,43,214,0.2); }
+.acct-form .menu-btn.primary{ width:auto; min-width:220px; font-size:14px; }
+.acct-link{
+  background:none; border:none; cursor:pointer;
+  font-family:'Press Start 2P', monospace; font-size:9px;
+  color:var(--accent); text-decoration:underline; text-shadow:0 0 6px rgba(0,255,255,0.6);
+  align-self:center; padding:4px;
+}
+.acct-hello{ font-size:12px; margin:0 0 6px; }
+.acct-hello b{ color:var(--yellow); font-weight:normal; text-shadow:0 0 8px var(--orange); }
+.acct-msg{ min-height:1em; font-size:9px; line-height:1.7; margin:14px 0 0; }
+.acct-msg[data-kind="ok"]{ color:#7cff7c; }
+.acct-msg[data-kind="error"]{ color:#ff6b8b; }
+.acct-hint{ margin-top:6px; color:var(--yellow); animation:none; }
+
+/* ---------- Submenú SIMULACIONES ---------- */
+#screen-simulaciones h2{ margin:0; }
+#screen-simulaciones .menu{ margin-top:24px; }
+.sim-round{ gap:5px; margin:-6px 0 6px; font-size:8px; max-width:100%; }
+.sim-round .menu-btn{ min-width:36px; padding:7px 4px; font-size:9px; }
+
+/* ---------- Pantallas PREDICCIÓN y ENTRENAMIENTO ---------- */
+#screen-prediccion.active, #screen-entrenamiento.active{ max-height:calc(100vh - 130px); overflow-y:auto; }
+#screen-prediccion h2, #screen-entrenamiento h2{ margin:0 0 14px; }
+#screen-prediccion h3, #screen-entrenamiento h3{ color:var(--accent); text-shadow:0 0 8px rgba(0,255,255,0.7); font-size:12px; margin:22px 0 10px; }
+#screen-prediccion h4{ font-size:10px; margin:12px 0 8px; }
+.pred-ai{ margin-top:12px; }
+.pred-ai .menu-btn{ font-size:10px; }
+.train-reset.menu-btn{ width:auto; font-size:10px; padding:10px 14px; }
+.train-decision .menu-btn{ width:auto; min-width:150px; font-size:12px; }
+.train-verdict{
+  text-align:center; font-size:13px; line-height:1.8; padding:12px; margin:0 0 12px;
+  border:2px solid currentColor; border-radius:4px;
+  box-shadow: 0 0 12px currentColor; text-shadow: 0 0 8px currentColor;
+}
+.train-verdict small{ font-size:9px; color:var(--muted); text-shadow:none; }
+.train-good{ color:#7cff7c; }
+.train-bad{ color:#ff6b8b; }
+.train-meh{ color:var(--yellow); }
+.pred-help{ color:var(--muted); font-size:9px; line-height:1.7; text-align:center; margin:0 0 16px; }
+.pred-count{ display:flex; align-items:center; justify-content:center; gap:10px; font-size:11px; color:#fff; }
+.pred-count .menu-btn{ width:auto; min-width:64px; font-size:13px; padding:10px 12px; }
+/* en los botones pequeños de opciones la flecha ▶ taparía el número */
+.pred-count .menu-btn::before{ display:none; }
+.pred-run.menu-btn{ width:auto; min-width:200px; font-size:16px; }
+.pred-progress{ margin:16px 0 0; }
+.pred-bar{ height:16px; border:2px solid rgba(0,229,255,0.6); border-radius:3px; background:rgba(0,0,0,0.45); overflow:hidden; box-shadow:0 0 10px rgba(0,229,255,0.35); }
+.pred-bar-fill{ height:100%; width:0; background:linear-gradient(90deg, var(--accent), var(--pink)); box-shadow:0 0 12px var(--pink); transition:width .15s linear; }
+.pred-status{ font-size:9px; color:var(--muted); text-align:center; margin:8px 0 0; }
+.pred-stats{ display:flex; gap:10px; flex-wrap:wrap; }
+.pred-stat{
+  flex:1 1 120px; display:flex; flex-direction:column; gap:8px; padding:12px;
+  background: rgba(8,2,24,0.7);
+  border:2px solid rgba(0,229,255,0.45); border-radius:4px; font-size:9px;
+  box-shadow: 0 0 10px rgba(0,229,255,0.25);
+}
+.pred-stat b{ color:#fff; font-size:16px; font-weight:normal; text-shadow:0 0 8px rgba(0,255,255,0.8); }
+.pred-stat small{ color:var(--muted); font-size:8px; }
+.pred-hist-row{ display:grid; grid-template-columns:48px 1fr 40px; align-items:center; gap:8px; font-size:9px; margin:4px 0; }
+.pred-modes .pred-hist-row{ grid-template-columns:96px 1fr 40px; }
+.pred-hist-bar{ height:10px; background:rgba(0,0,0,0.45); border-radius:2px; overflow:hidden; }
+.pred-hist-bar span{ display:block; height:100%; background:linear-gradient(90deg, var(--accent), var(--pink)); }
+.pred-hist-count{ color:#fff; text-align:right; }
+.pred-table{ width:100%; border-collapse:collapse; font-size:9px; }
+.pred-table th, .pred-table td{ padding:8px 4px; text-align:right; border-bottom:1px solid rgba(0,229,255,0.2); }
+.pred-table th:first-child{ text-align:left; }
+.pred-table td{ color:#fff; }
+.pred-lanzziano{ color:#ffd400; }
+.pred-jhoabxi{ color:#6fa8ff; }
+
+/* fila de botones bajo un contenido */
+.actions{display:flex;gap:12px;justify-content:center;margin-top:16px}
+.actions.small{margin-top:8px}
+
+/* barra de desplazamiento a juego */
+::-webkit-scrollbar{ width:8px; }
+::-webkit-scrollbar-track{ background:rgba(0,0,0,0.3); }
+::-webkit-scrollbar-thumb{ background:linear-gradient(var(--accent), var(--pink)); border-radius:4px; }
+
+/* ---------- animaciones ---------- */
+@keyframes blink{ 50%{ opacity:0; } }
+@keyframes soft-pulse{ 50%{ opacity:.45; } }
+@keyframes shine{ from{ left:-60%; } to{ left:130%; } }
+@keyframes pulse-glow{
+  50%{ box-shadow: 0 0 20px var(--pink), 0 0 48px rgba(255,138,61,0.8), inset 0 0 18px rgba(255,255,255,0.35); }
+}
+/* parpadeo de tubo de neón: casi siempre encendido, a ratos titila */
+@keyframes neon-flicker{
+  0%, 89%, 91%, 94%, 100%{ opacity:1; }
+  90%{ opacity:.55; text-shadow: 0 0 2px #fff, 4px 4px 0 var(--pink); }
+  92%, 93%{ opacity:.8; }
+}
+
+/* Con "reducir movimiento" en el sistema, las nubes del fondo se quedan quietas (menuBackground.js);
+   el rebote de los botones y la entrada al juego (3, 2, 1, PELIEN) se mantienen. */
+
+/* ---------- pantallas estrechas: todo en una columna ---------- */
+@media (max-width:920px){
+  .panel.grid{grid-template-columns:1fr; padding:24px; gap:12px}
+  .title{transform:translateX(0); text-align:center; justify-self:center}
+  .title-main{font-size:40px}
+  .title-sub{font-size:11px; margin-top:12px}
+  .menu-btn{width:260px}
+  #screen-game canvas{height:360px}
+}

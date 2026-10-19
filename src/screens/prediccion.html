@@ -1,0 +1,38 @@
+<!-- Pantalla PREDICCIÓN: menu.js la carga dentro de #screen-prediccion y src/js/prediccion.js la controla -->
+<h2>PREDICCIÓN</h2>
+<p class="pred-help">Juega muchas partidas de IA seguidas, sin dibujar, y saca las medias. Usa siempre las mismas semillas: compara antes y después de un cambio.</p>
+
+<div class="pred-count" role="group" aria-label="Número de partidas">
+  <span>Partidas:</span>
+  <button class="menu-btn pred-opt" data-action="predict-count" data-count="10">10</button>
+  <button class="menu-btn pred-opt selected" data-action="predict-count" data-count="20">20</button>
+  <button class="menu-btn pred-opt" data-action="predict-count" data-count="50">50</button>
+</div>
+
+<div class="pred-count pred-ai" role="group" aria-label="IA que juega">
+  <span>IA:</span>
+  <button class="menu-btn pred-ai-opt selected" data-action="predict-ai" data-ai="original">Original</button>
+  <button class="menu-btn pred-ai-opt" data-action="predict-ai" data-ai="trained">Entrenada</button>
+</div>
+
+<div class="pred-count pred-ai" role="group" aria-label="Ronda inicial">
+  <span>Desde ronda:</span>
+  <button class="menu-btn pred-start-opt selected" data-action="predict-start" data-round="1">1</button>
+  <button class="menu-btn pred-start-opt" data-action="predict-start" data-round="10">10</button>
+  <button class="menu-btn pred-start-opt" data-action="predict-start" data-round="14">14</button>
+</div>
+
+<div class="actions">
+  <button class="menu-btn primary pred-run" data-action="predict-run">EJECUTAR</button>
+</div>
+
+<div class="pred-progress" hidden>
+  <div class="pred-bar"><div class="pred-bar-fill"></div></div>
+  <p class="pred-status"></p>
+</div>
+
+<div class="pred-results" aria-live="polite"></div>
+
+<div class="actions">
+  <button class="menu-btn" data-action="back-sims">Volver</button>
+</div>
