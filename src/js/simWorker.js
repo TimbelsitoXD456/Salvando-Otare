@@ -4,7 +4,7 @@ import { runHeadless } from './game.js';
 
 self.onmessage = async ({ data }) => {
   try {
-    const result = await runHeadless({ seed: data.seed, aiParams: data.aiParams, maxSeconds: data.maxSeconds, startRound: data.startRound, chunked: false });
+    const result = await runHeadless({ seed: data.seed, aiParams: data.aiParams, maxSeconds: data.maxSeconds, startRound: data.startRound, boosts: data.boosts, chunked: false });
     self.postMessage({ id: data.id, result });
   } catch (err) {
     self.postMessage({ id: data.id, error: err.message });
