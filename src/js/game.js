@@ -301,9 +301,18 @@ function setupPlayers(canvasW, canvasH) {
 }
 
 // spawn enemies for round (mix)
+// Avisos para la música (music.js vía menu.js); solo en partidas que se ven, no en las simulaciones sin pantalla
+function announce(type, detail) {
+  if (headlessView || typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(type, { detail }));
+}
+function announceRound() {
+  announce('battleState', { round: currentRound, boss: currentRound >= maxRounds, tigre: enemies.some(e => e.kind === 'tigre') });
+}
+
 function spawnEnemiesForRound(round, canvasW, canvasH) {
   enemies = [];
-  if (round >= maxRounds) { spawnBoss(canvasW, canvasH); return; }
+  if (round >= maxRounds) { spawnBoss(canvasW, canvasH); announceRound(); return; }
   const baseY = canvasH - world.groundOffset - 52;
   // ensure round 1 => 3 enemies; then increase
   const count = Math.min(3 + Math.floor((round - 1) * 1.2), 40);
@@ -321,6 +330,7 @@ function spawnEnemiesForRound(round, canvasW, canvasH) {
     e.y = baseY + 50 - e.h; // apoyado en el suelo según su altura (los de 50 quedan igual que siempre)
     enemies.push(e);
   }
+  announceRound();
 }
 
 // utilities
@@ -963,8 +973,8 @@ function updateCamera(W) {
 
 // triggers
 // el loop sigue corriendo (update ya se salta con gameOver) para que el overlay se redibuje, p. ej. al redimensionar
-function triggerDefeat() { gameOver = true; gameOverType = 'defeat'; saveBestRound(); }
-function triggerVictory() { gameOver = true; gameOverType = 'victory'; saveBestRound(); }
+function triggerDefeat() { if (gameOver) return; gameOver = true; gameOverType = 'defeat'; saveBestRound(); announce('battleEnd', { result: 'defeat' }); }
+function triggerVictory() { if (gameOver) return; gameOver = true; gameOverType = 'victory'; saveBestRound(); announce('battleEnd', { result: 'victory' }); }
 // ronda más alta del jugador (solo partidas de verdad: las simulaciones no cuentan);
 // 'runFinished' avisa a cloud.js para subir las CapoCoins ganadas
 function saveBestRound() {
