@@ -283,13 +283,12 @@ function setupPlayers(canvasW, canvasH) {
   // fuente de controles de cada jugador: IA en simulación, teclado en partida normal
   players[0].input = simulationMode ? createAI('melee', aiParams) : keyboardInput(players[0].controls);
   players[1].input = simulationMode ? createAI('shooter', aiParams) : keyboardInput(players[1].controls);
-  // objetos de la TIENDA (solo partidas de verdad; las simulaciones miden el juego base)
-  if (!simulationMode) {
-    for (const p of players) {
-      if (boosts.speed) { p.maxSpeed *= 2; p.accel *= 2; }
-      if (boosts.strength) { p.meleeDamage *= 2; p.bulletDamage *= 2; }
-      if (boosts.health) { p.maxHp *= 2; p.hp = p.maxHp; }
-    }
+  // objetos de la TIENDA: en partidas de verdad, los activos del jugador; en simulación, ninguno salvo
+  // que Predicción / Entrenamiento los pidan (runHeadless({ boosts }))
+  for (const p of players) {
+    if (boosts.speed) { p.maxSpeed *= 2; p.accel *= 2; }
+    if (boosts.strength) { p.meleeDamage *= 2; p.bulletDamage *= 2; }
+    if (boosts.health) { p.maxHp *= 2; p.hp = p.maxHp; }
   }
   runCoins = 0;
   simStats = newSimStats();
@@ -1275,10 +1274,12 @@ export function isBusy() { return running || headlessBusy; }
 function clampRound(r) { return Math.max(1, Math.min(maxRounds, Math.floor(r) || 1)); }
 
 // chunked = false: todo de un tirón (para Web Workers, donde no hay pestaña que congelar)
-export function runHeadless({ seed = 1, maxSeconds = 600, onProgress, isCancelled, aiParams: params = null, chunked = true, startRound: round = 1 } = {}) {
+// boosts: objetos de la TIENDA para medir su efecto ({ speed, strength, health }); por defecto ninguno
+export function runHeadless({ seed = 1, maxSeconds = 600, onProgress, isCancelled, aiParams: params = null, chunked = true, startRound: round = 1, boosts: simBoosts = null } = {}) {
   if (running || headlessBusy) return Promise.reject(new Error('Ya hay una partida en marcha.'));
   headlessBusy = true;
   aiParams = params;
+  boosts = { ...(simBoosts || {}) };
   startRound = clampRound(round);
   const random = seededRandom(seed);
   const realRandom = Math.random;
@@ -1315,7 +1316,7 @@ export function runHeadless({ seed = 1, maxSeconds = 600, onProgress, isCancelle
         food: { ...simStats.food },
         modeFrames
       };
-      headlessView = null; headlessBusy = false; simulationMode = false; aiParams = null;
+      headlessView = null; headlessBusy = false; simulationMode = false; aiParams = null; boosts = {};
       gameOver = false; gameOverType = '';
       players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = [];
       resolve(result);
@@ -1338,7 +1339,7 @@ export function runHeadless({ seed = 1, maxSeconds = 600, onProgress, isCancelle
           }
         });
       } catch (err) {
-        headlessView = null; headlessBusy = false; simulationMode = false; aiParams = null;
+        headlessView = null; headlessBusy = false; simulationMode = false; aiParams = null; boosts = {};
         reject(err);
         return;
       }
