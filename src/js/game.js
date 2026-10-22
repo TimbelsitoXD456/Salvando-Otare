@@ -1,6 +1,7 @@
 import { isDown, wasPressed, resetInput } from './engine/input.js';
 import { createLoop } from './engine/loop.js';
 import { addKill, recordRound } from './kills.js';
+import { coinValue, earnCoins, getCoins } from './tienda.js';
 import { createAI } from './ai.js';
 import { FOOD_TYPES, FOOD_LIFETIME, FOOD_SPAWN_FIRST, FOOD_SPAWN_INTERVAL, FOOD_MAX_ON_MAP, FOOD_SIZE,
   randomFoodKind, drawFood, drawFloatText } from './food.js';
@@ -32,6 +33,8 @@ let headlessBusy = false;
 let aiParams = null; // parámetros de la IA de simulación (null = IA original); ver AI_PARAM_SPACE en ai.js
 let startRound = 1;  // ronda en la que empieza la simulación (para ver enemigos de rondas altas: Tigre, Fuerte, jefe)
 let introHold = false; // congelado durante la cuenta atrás 3, 2, 1, PELIEN (se dibuja pero no avanza)
+let boosts = {};       // objetos de la TIENDA activos en esta partida: { speed, strength, health } (tienda.js)
+let runCoins = 0;      // CapoCoins ganadas en esta partida
 let onResizeCallback = null;
 let lastGroundY = null; // altura del suelo en el último resize (null = partida sin crear)
 
@@ -280,6 +283,15 @@ function setupPlayers(canvasW, canvasH) {
   // fuente de controles de cada jugador: IA en simulación, teclado en partida normal
   players[0].input = simulationMode ? createAI('melee', aiParams) : keyboardInput(players[0].controls);
   players[1].input = simulationMode ? createAI('shooter', aiParams) : keyboardInput(players[1].controls);
+  // objetos de la TIENDA (solo partidas de verdad; las simulaciones miden el juego base)
+  if (!simulationMode) {
+    for (const p of players) {
+      if (boosts.speed) { p.maxSpeed *= 2; p.accel *= 2; }
+      if (boosts.strength) { p.meleeDamage *= 2; p.bulletDamage *= 2; }
+      if (boosts.health) { p.maxHp *= 2; p.hp = p.maxHp; }
+    }
+  }
+  runCoins = 0;
   simStats = newSimStats();
   bullets = []; enemyBullets = []; enemies = [];
   foods = []; floatTexts = []; foodSpawnTimer = FOOD_SPAWN_FIRST; gameTime = 0;
@@ -556,8 +568,13 @@ function killEnemy(e) {
   e.alive = false;
   const killer = players[e.lastHitBy];
   if (!killer) return;
-  if (simulationMode) simStats.kills[e.lastHitBy]++; // las kills de la IA no cuentan para el contador
-  else addKill(killer.name);
+  if (simulationMode) { simStats.kills[e.lastHitBy]++; return; } // las kills de la IA no cuentan ni dan monedas
+  addKill(killer.name);
+  // CapoCoins: 1 por enemigo, 2 por Tigre/Fuerte, 100 por el jefe
+  const coins = coinValue(e.kind);
+  earnCoins(coins);
+  runCoins += coins;
+  floatTexts.push({ x: e.x + e.w / 2 - 8, y: e.y - 14, text: `+${coins}`, color: '#ffd24a', life: 1.0 });
 }
 
 function handlePlayerDeath(deadIdx) {
@@ -949,8 +966,13 @@ function updateCamera(W) {
 // el loop sigue corriendo (update ya se salta con gameOver) para que el overlay se redibuje, p. ej. al redimensionar
 function triggerDefeat() { gameOver = true; gameOverType = 'defeat'; saveBestRound(); }
 function triggerVictory() { gameOver = true; gameOverType = 'victory'; saveBestRound(); }
-// ronda más alta del jugador (solo partidas de verdad: las simulaciones no cuentan)
-function saveBestRound() { if (!simulationMode) recordRound(currentRound); }
+// ronda más alta del jugador (solo partidas de verdad: las simulaciones no cuentan);
+// 'runFinished' avisa a cloud.js para subir las CapoCoins ganadas
+function saveBestRound() {
+  if (simulationMode) return;
+  recordRound(currentRound);
+  window.dispatchEvent(new CustomEvent('runFinished'));
+}
 
 // render function
 function render() {
@@ -1101,6 +1123,17 @@ function render() {
     ctx.fillStyle = '#fff'; ctx.font = '12px "Press Start 2P", monospace'; ctx.fillText(`${p.name} ${Math.round(p.hp)}/${p.maxHp}`, hudX + boxW + 8, y + boxH - 6);
   });
 
+  // CapoCoins (partidas de verdad): saldo total y lo ganado en esta partida, y los objetos activos
+  if (!simulationMode) {
+    const cy = hudY + players.length * 34 + 6;
+    drawCoinIcon(ctx, hudX + 9, cy + 7, 8);
+    ctx.fillStyle = '#ffd24a'; ctx.font = '12px "Press Start 2P", monospace';
+    ctx.fillText(`${getCoins()}`, hudX + 24, cy + 12);
+    if (runCoins > 0) { ctx.fillStyle = '#fff3b0'; ctx.font = '9px "Press Start 2P", monospace'; ctx.fillText(`+${runCoins} esta partida`, hudX + 110, cy + 11); }
+    const active = [['speed', 'x2 VEL'], ['strength', 'x2 FUE'], ['health', 'x2 VIDA']].filter(([k]) => boosts[k]).map(([, t]) => t);
+    if (active.length) { ctx.fillStyle = '#ff6bec'; ctx.font = '8px "Press Start 2P", monospace'; ctx.fillText(active.join('  '), hudX, cy + 30); }
+  }
+
   // HUD right: round + legend
   ctx.fillStyle = 'rgba(0,0,0,0.45)'; const panelW = 380, panelH = 140; const px = W - panelW - 18, py = 18;
   ctx.fillRect(px, py, panelW, panelH);
@@ -1155,6 +1188,17 @@ function render() {
 }
 
 
+// Moneda CapoCoin en pixel art: círculo dorado con borde y una "C"
+function drawCoinIcon(ctx, cx, cy, r) {
+  ctx.save();
+  ctx.fillStyle = '#8a5a12'; ctx.beginPath(); ctx.arc(cx, cy, r + 1.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffd24a'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff3b0'; ctx.fillRect(Math.round(cx - r * 0.55), Math.round(cy - r * 0.6), 2, 2);
+  ctx.fillStyle = '#8a5a12'; ctx.font = `${Math.round(r * 1.1)}px "Press Start 2P", monospace`;
+  ctx.fillText('C', Math.round(cx - r * 0.45), Math.round(cy + r * 0.5));
+  ctx.restore();
+}
+
 // wrapper update
 function update(dt) {
   if (paused || gameOver || introHold) return;
@@ -1165,11 +1209,13 @@ function update(dt) {
 // public API
 // startRound solo se usa en simulación; jugando de verdad siempre se empieza en la ronda 1
 // hold: true = empieza congelado hasta releaseHold() (cuenta atrás del menú)
-export function start({ canvas: suppliedCanvas, onResize, simulation = false, aiParams: params = null, startRound: round = 1, hold = false } = {}) {
+// boosts: objetos de la TIENDA activos ({ speed, strength, health }); no se aplican en simulación
+export function start({ canvas: suppliedCanvas, onResize, simulation = false, aiParams: params = null, startRound: round = 1, hold = false, boosts: shopBoosts = null } = {}) {
   if (running || headlessBusy) return;
   running = true; paused = false; gameOver = false; gameOverType = ''; onResizeCallback = onResize || null;
   introHold = !!hold;
   simulationMode = !!simulation;
+  boosts = simulationMode ? {} : { ...(shopBoosts || {}) };
   aiParams = simulationMode ? params : null;
   startRound = simulationMode ? clampRound(round) : 1;
   canvas = suppliedCanvas instanceof HTMLCanvasElement ? suppliedCanvas : document.querySelector('canvas#gameCanvas');
@@ -1200,6 +1246,8 @@ export function restart({ hold = false } = {}) {
 
 export function stop() {
   if (!running) return;
+  // salir a mitad de partida: subir igualmente las CapoCoins ganadas
+  if (!simulationMode && !gameOver && runCoins > 0) window.dispatchEvent(new CustomEvent('runFinished'));
   running = false; paused = false; introHold = false;
   if (loopHandle) loopHandle.stop(); loopHandle = null;
   if (resizeObserver) { try { resizeObserver.unobserve(canvas); } catch(e){} resizeObserver = null; }
