@@ -11,6 +11,7 @@ import { AI_PARAM_SPACE, DEFAULT_AI_PARAMS, normalizeAIParams } from './ai.js';
 import { runGames, workerCount } from './simPool.js';
 import { getTrained, saveTrained, clearTrained } from './iaEntrenada.js';
 import { summarize } from './prediccion.js';
+import { BOOST_OPTIONS, boostsFor } from './tienda.js';
 
 const VARIANTS = 9;              // mutaciones por generación (+ el campeón = 10 candidatos)
 const GAMES_PER_VARIANT = 40;
@@ -23,6 +24,7 @@ const SIGMA_START = 0.15;        // tamaño de la mutación, en fracción del ra
 const SIGMA_END = 0.05;          // ...que se va afinando hasta este valor en la última generación
 
 let generations = 20;
+let boostKey = 'none';   // objetos de la tienda con los que entrena (tienda.js BOOST_OPTIONS)
 let running = false;
 let cancelled = false;
 let pending = null; // resultado del último entrenamiento, a la espera de Guardar / Descartar
@@ -34,6 +36,10 @@ export function handleTrainingAction(action, btn, section) {
     generations = +btn.dataset.gens || 20;
     section.querySelectorAll('.train-opt').forEach(b => b.classList.toggle('selected', b === btn));
     refreshTraining(section);
+  } else if (action === 'train-boost') {
+    boostKey = btn.dataset.boost || 'none';
+    section.querySelectorAll('.train-boost-opt').forEach(b => b.classList.toggle('selected', b === btn));
+    refreshTraining(section);
   } else if (action === 'train-run') {
     train(section);
   } else if (action === 'train-save' && pending) {
@@ -41,6 +47,7 @@ export function handleTrainingAction(action, btn, section) {
     saveTrained({
       params: pending.params,
       generations: (prev && pending.fromTrained ? prev.generations || 0 : 0) + pending.generations,
+      boosts: pending.boostKey,   // con qué objetos se entrenó ('none' = juego base)
       validation: { original: pending.original.avgRound, trained: pending.trained.avgRound, games: VALIDATION_GAMES }
     });
     pending = null;
@@ -67,8 +74,10 @@ export function refreshTraining(section) {
   const trained = getTrained();
   const games = generations * (VARIANTS + 1) * GAMES_PER_VARIANT + 2 * VALIDATION_GAMES;
   const mins = Math.max(1, Math.round(games * SECONDS_PER_GAME / workerCount() / 60));
+  const trainedWith = trained?.boosts && trained.boosts !== 'none' ? ` (entrenada con objetos: ${BOOST_OPTIONS[trained.boosts]?.label})` : '';
+  const withBoosts = boostKey === 'none' ? 'sin objetos' : `con objetos: ${BOOST_OPTIONS[boostKey].label}`;
   section.querySelector('.train-start').textContent =
-    `Parte de: ${trained ? 'la IA entrenada guardada' : 'la IA original'} · ${games} partidas · ≈${mins} min (${workerCount()} núcleos)`;
+    `Parte de: ${trained ? 'la IA entrenada guardada' + trainedWith : 'la IA original'} · entrena ${withBoosts} · ${games} partidas · ≈${mins} min (${workerCount()} núcleos)`;
   section.querySelector('.train-reset-row').hidden = !trained;
 }
 
@@ -113,7 +122,8 @@ async function train(section) {
   const $ = sel => section.querySelector(sel);
   const fill = $('.pred-bar-fill'), status = $('.train-status');
   const genList = $('.train-gens-list'), results = $('.train-results');
-  const buttons = section.querySelectorAll('.train-opt, .train-run, .train-reset');
+  const buttons = section.querySelectorAll('.train-opt, .train-boost-opt, .train-run, .train-reset');
+  const usedBoostKey = boostKey, boosts = boostsFor(boostKey);
   buttons.forEach(b => { b.disabled = true; });
   $('.pred-progress').hidden = false;
   $('.train-decision').hidden = true;
@@ -137,7 +147,7 @@ async function train(section) {
       const sigma = SIGMA_START + (SIGMA_END - SIGMA_START) * (G > 1 ? g / (G - 1) : 1);
       const candidates = [champion, ...Array.from({ length: VARIANTS }, () => mutate(champion, sigma))];
       const seeds = Array.from({ length: GAMES_PER_VARIANT }, (_, i) => TRAIN_SEED_BASE + g * 1000 + i + 1);
-      const jobs = candidates.flatMap(params => seeds.map(seed => ({ seed, aiParams: params })));
+      const jobs = candidates.flatMap(params => seeds.map(seed => ({ seed, aiParams: params, boosts })));
       const base = gamesDone;
       const { results: played, cancelled: wasCancelled } = await runGames(jobs, {
         isCancelled: () => cancelled,
@@ -155,7 +165,7 @@ async function train(section) {
     if (!cancelled) {
       // validación con partidas que el entrenamiento no ha visto
       const seeds = Array.from({ length: VALIDATION_GAMES }, (_, i) => i + 1);
-      const jobs = [null, champion].flatMap(params => seeds.map(seed => ({ seed, aiParams: params })));
+      const jobs = [null, champion].flatMap(params => seeds.map(seed => ({ seed, aiParams: params, boosts })));
       const base = gamesDone;
       const { results: played, cancelled: wasCancelled } = await runGames(jobs, {
         isCancelled: () => cancelled,
@@ -164,7 +174,7 @@ async function train(section) {
       if (!wasCancelled) {
         const orig = played.slice(0, VALIDATION_GAMES), mine = played.slice(VALIDATION_GAMES);
         pending = {
-          params: champion, generations: G, fromTrained,
+          params: champion, generations: G, fromTrained, boostKey: usedBoostKey,
           original: summarize(orig), trained: summarize(mine),
           diffs: mine.map((r, i) => r.progress - orig[i].progress)
         };
