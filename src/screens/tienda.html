@@ -1,0 +1,30 @@
+<!-- Pantalla TIENDA: menu.js la carga dentro de #screen-tienda y src/js/tiendaUI.js la controla -->
+<h2>TIENDA</h2>
+
+<p class="shop-balance"><span class="coin-icon" aria-hidden="true"></span><b class="shop-coins">0</b> CapoCoins</p>
+<p class="pred-help shop-earn">Gana CapoCoins jugando: 1 por enemigo, 2 por Tigre o Fuerte y 100 por el jefe.</p>
+
+<div class="shop-items">
+  <div class="shop-item" data-item="speed">
+    <div class="shop-badge">x2</div>
+    <div class="shop-info"><b class="shop-name"></b><small class="shop-desc"></small></div>
+    <button class="menu-btn shop-btn" data-action="shop-buy" data-item="speed"></button>
+  </div>
+  <div class="shop-item" data-item="strength">
+    <div class="shop-badge">x2</div>
+    <div class="shop-info"><b class="shop-name"></b><small class="shop-desc"></small></div>
+    <button class="menu-btn shop-btn" data-action="shop-buy" data-item="strength"></button>
+  </div>
+  <div class="shop-item" data-item="health">
+    <div class="shop-badge">x2</div>
+    <div class="shop-info"><b class="shop-name"></b><small class="shop-desc"></small></div>
+    <button class="menu-btn shop-btn" data-action="shop-buy" data-item="health"></button>
+  </div>
+</div>
+
+<p class="pred-help shop-guest" hidden>Para comprar necesitas una cuenta: entra o regístrate en CUENTA. Las CapoCoins que ganes sin cuenta se suman a ella.</p>
+<p class="acct-msg shop-msg" aria-live="polite"></p>
+
+<div class="actions">
+  <button class="menu-btn" data-action="back">Volver</button>
+</div>
