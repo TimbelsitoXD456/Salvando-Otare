@@ -13,6 +13,16 @@ export const ITEMS = {
   health:   { name: 'X2 Vida',      price: 500, desc: 'Los dos empiezan con el doble de vida.' }
 };
 
+// Opciones del selector "Objetos" de Predicción y Entrenamiento (simular con objetos de la tienda)
+export const BOOST_OPTIONS = {
+  none:     { label: 'Ninguno',   boosts: {} },
+  speed:    { label: 'Velocidad', boosts: { speed: true } },
+  strength: { label: 'Fuerza',    boosts: { strength: true } },
+  health:   { label: 'Vida',      boosts: { health: true } },
+  all:      { label: 'Todos',     boosts: { speed: true, strength: true, health: true } }
+};
+export const boostsFor = key => ({ ...(BOOST_OPTIONS[key] || BOOST_OPTIONS.none).boosts });
+
 export function coinValue(kind) {
   if (kind === 'boss') return 100;
   if (kind === 'tigre' || kind === 'fuerte') return 2;
