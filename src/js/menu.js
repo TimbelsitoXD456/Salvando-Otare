@@ -6,6 +6,8 @@ import { getTrained } from './iaEntrenada.js';
 import { startMenuBackground } from './menuBackground.js';
 import { initCloud, onCloudChange, isAdmin, currentUser, isRecovering } from './cloud.js';
 import { handleAccountAction, refreshAccount } from './cuenta.js';
+import { getCoins, getActiveBoosts } from './tienda.js';
+import { handleShopAction, refreshShop } from './tiendaUI.js';
 
 const Screens = {
   MENU: 'screen-menu',
@@ -14,6 +16,7 @@ const Screens = {
   PREDICTION: 'screen-prediccion',
   TRAINING: 'screen-entrenamiento',
   ACCOUNT: 'screen-cuenta',
+  SHOP: 'screen-tienda',
   SETTINGS: 'screen-settings',
   CREDITS: 'screen-credits',
   GAME: 'screen-game'
@@ -42,6 +45,9 @@ const app = {
     // cuentas (Supabase): el menú se actualiza al entrar/salir; SIMULACIONES solo para el admin
     onCloudChange(() => this.refreshCloudUI());
     initCloud();
+    // CapoCoins: saldo en el menú y en la TIENDA
+    window.addEventListener('coinsChanged', () => this.refreshCoins());
+    this.refreshCoins();
     // fondo animado de Otare (no se dibuja mientras se juega: el canvas del juego lo tapa)
     startMenuBackground(document.querySelector('.otare-bg'), () => this.currentScreen !== Screens.GAME);
     // REINTENTAR en la pantalla de derrota/victoria: el menú hace la cuenta atrás
@@ -112,6 +118,13 @@ const app = {
     // llegó desde el enlace de "olvidé mi contraseña": abrir CUENTA para poner la nueva
     if (isRecovering() && this.currentScreen !== Screens.ACCOUNT && this.currentScreen !== Screens.GAME) this.showAccount();
     refreshAccount(document.getElementById(Screens.ACCOUNT));
+    this.refreshCoins();
+  },
+
+  refreshCoins(){
+    const n = document.querySelector('.menu-coins-n');
+    if (n) n.textContent = getCoins();
+    refreshShop(document.getElementById(Screens.SHOP));
   },
 
   showAccount(){
@@ -139,7 +152,13 @@ const app = {
   handleAction(action, btn){
     switch(action){
       case 'play':
-        this.launchGame();
+        this.launchGame({ boosts: getActiveBoosts() });   // objetos de la TIENDA activos
+        break;
+      case 'shop':
+        this.showLoadedScreen(Screens.SHOP, 'src/screens/tienda.html', refreshShop);
+        break;
+      case 'shop-buy':
+        handleShopAction(action, btn, document.getElementById(Screens.SHOP));
         break;
       case 'sims':
       case 'back-sims':
@@ -402,7 +421,7 @@ const app = {
     }
   },
 
-  async startGame({ simulation = false, aiParams = null, startRound = 1, hold = false } = {}){
+  async startGame({ simulation = false, aiParams = null, startRound = 1, hold = false, boosts = null } = {}){
     this._returnScreen = simulation ? Screens.SIMS : Screens.MENU;
     this.showScreen(Screens.GAME);
     try {
@@ -411,7 +430,7 @@ const app = {
       this.gameModule = m;
       // si se viene de una predicción cancelada, esperar a que suelte la partida sin canvas
       while (m.isBusy()) await new Promise(r => setTimeout(r, 20));
-      m.start({ canvas: this.canvas, onResize: () => this.resizeCanvasToDisplaySize(), simulation, aiParams, startRound, hold });
+      m.start({ canvas: this.canvas, onResize: () => this.resizeCanvasToDisplaySize(), simulation, aiParams, startRound, hold, boosts });
       // ensure pause button visible
       this.showPauseButton();
     } catch (err) {
