@@ -192,6 +192,7 @@ const app = {
       case 'predict-count':
       case 'predict-ai':
       case 'predict-start':
+      case 'predict-boost':
       case 'predict-run':
         handlePredictionAction(action, btn, document.getElementById(Screens.PREDICTION));
         break;
@@ -200,6 +201,7 @@ const app = {
         this.showLoadedScreen(Screens.TRAINING, 'src/screens/entrenamiento.html', refreshTraining);
         break;
       case 'train-gens':
+      case 'train-boost':
       case 'train-run':
       case 'train-save':
       case 'train-discard':
