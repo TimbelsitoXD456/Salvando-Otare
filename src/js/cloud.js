@@ -8,6 +8,7 @@
 // - Sin conexión con Supabase (sin internet, file://...), el juego funciona igual en modo invitado.
 import { getKills, replaceKills, getBestRound, replaceBestRound, PLAYERS } from './kills.js';
 import { getTrained, replaceTrained } from './iaEntrenada.js';
+import { getPending, clearPending, setWallet, resetWallet } from './tienda.js';
 
 // La clave "anon" es pública por diseño: solo permite lo que dejan las reglas RLS.
 // (La clave service_role NUNCA va aquí.)
@@ -61,7 +62,8 @@ export async function initCloud() {
   status = 'ready';
   await applySession(data.session, 'INITIAL_SESSION');
   window.addEventListener('progressChanged', schedulePush);
-  window.addEventListener('online', schedulePush);
+  window.addEventListener('online', () => { schedulePush(); flushCoins(); });
+  window.addEventListener('runFinished', () => flushCoins());   // fin de partida: subir CapoCoins
 }
 
 async function applySession(s, event) {
@@ -92,7 +94,7 @@ async function loadProfile() {
 async function syncOnLogin() {
   const uid = session.user.id;
   syncState = 'syncing'; notify();
-  const { data: row, error } = await sb.from('progress').select('kills, best_round, trained_ai').eq('user_id', uid).maybeSingle();
+  const { data: row, error } = await sb.from('progress').select('kills, best_round, trained_ai, capocoins, items').eq('user_id', uid).maybeSingle();
   if (error) { console.warn('No se pudo leer el progreso:', error); syncState = 'error'; return; }
   const owner = getOwner();
   const cloudKills = row?.kills || {};
@@ -107,8 +109,65 @@ async function syncOnLogin() {
   replaceBestRound(guest || mine ? Math.max(row?.best_round || 0, getBestRound()) : (row?.best_round || 0));
   if (row?.trained_ai) replaceTrained(row.trained_ai);
   else if (!(guest || mine)) replaceTrained(null);
+  // CapoCoins: el saldo y los objetos los manda la cuenta; las ganadas sin subir (de invitado o sin
+  // internet) se suben ahora. Si eran de otra cuenta, se descartan.
+  setWallet({ coins: row?.capocoins ?? 0, items: row?.items || {} });
+  if (!(guest || mine)) clearPending();
   setOwner(uid);
   await push();
+  await flushCoins();
+}
+
+// ---------- CapoCoins y tienda ----------
+const MAX_COINS_PER_SEND = 3000;   // el mismo límite que pone supabase/tienda.sql
+let flushing = false, retryTimer = null;
+
+async function flushCoins() {
+  if (!session || !sb || flushing) return;
+  const amount = Math.min(getPending(), MAX_COINS_PER_SEND);
+  if (amount <= 0) return;
+  flushing = true;
+  const { data, error } = await sb.rpc('add_capocoins', { amount });
+  flushing = false;
+  if (error) {
+    // 'demasiado_pronto' = otro envío hace menos de 15 s; sin internet, etc.: se reintenta luego
+    clearTimeout(retryTimer);
+    retryTimer = setTimeout(flushCoins, 16000);
+    return;
+  }
+  clearPending(amount);
+  setWallet({ coins: data });
+  if (getPending() > 0) { clearTimeout(retryTimer); retryTimer = setTimeout(flushCoins, 16000); } // quedaban más de 3000
+  notify();
+}
+
+function shopError(error) {
+  const m = error?.message || '';
+  if (m.includes('sin_saldo')) return 'No tienes suficientes CapoCoins.';
+  if (m.includes('ya_comprado')) return 'Ya tienes ese objeto.';
+  if (m.includes('no_comprado')) return 'Primero tienes que comprarlo.';
+  if (m.includes('sin_sesion')) return 'Inicia sesión en CUENTA para comprar.';
+  return friendly(error);
+}
+
+// Comprar: lo valida Supabase (precio, saldo, que no lo tengas ya). Devuelve { ok, message }
+export async function buyItem(item) {
+  if (!sb || !session) return { ok: false, message: 'Inicia sesión en CUENTA para comprar.' };
+  await flushCoins();   // que cuenten las monedas recién ganadas
+  const { data, error } = await sb.rpc('buy_item', { item });
+  if (error) return { ok: false, message: shopError(error) };
+  setWallet({ coins: data.capocoins, items: data.items });
+  notify();
+  return { ok: true, message: '¡Comprado y activado!' };
+}
+
+export async function setItemActive(item, active) {
+  if (!sb || !session) return { ok: false, message: 'Inicia sesión en CUENTA.' };
+  const { data, error } = await sb.rpc('set_item_active', { item, active });
+  if (error) return { ok: false, message: shopError(error) };
+  setWallet({ items: data });
+  notify();
+  return { ok: true, message: active ? 'Activado.' : 'Desactivado.' };
 }
 
 // Cerrar sesión: el navegador vuelve a ser de invitado, empezando de cero (lo de la cuenta queda en la nube)
@@ -116,6 +175,7 @@ function resetLocalForGuest() {
   replaceKills({});
   replaceBestRound(0);
   replaceTrained(null);
+  resetWallet();
   setOwner(null);
   syncState = 'idle';
 }
@@ -188,6 +248,7 @@ export async function signOut() {
   if (!sb) return;
   clearTimeout(pushTimer);
   await push();                       // subir lo último antes de salir
+  await flushCoins();
   await sb.auth.signOut();
 }
 
