@@ -31,7 +31,7 @@ function killWorkers() {
   workers = null;
 }
 
-// jobs: [{ seed, aiParams, maxSeconds?, startRound? }]. Devuelve { results, cancelled }: results[i] es el resultado de jobs[i]
+// jobs: [{ seed, aiParams, maxSeconds?, startRound?, boosts? }]. Devuelve { results, cancelled }: results[i] es el resultado de jobs[i]
 // (null si no se llegó a jugar porque se canceló).
 // Las tandas van en cola: una nueva espera a que acabe (o se cancele) la anterior.
 let queue = Promise.resolve();
@@ -85,8 +85,8 @@ function runOnWorkers(ws, jobs, results, tick, cancelled) {
       if (next >= jobs.length) { if (pending === 0) end(); return; }
       const id = next++;
       pending++;
-      const { seed, aiParams, maxSeconds = 600, startRound = 1 } = jobs[id];
-      w.postMessage({ id, seed, aiParams, maxSeconds, startRound });
+      const { seed, aiParams, maxSeconds = 600, startRound = 1, boosts = null } = jobs[id];
+      w.postMessage({ id, seed, aiParams, maxSeconds, startRound, boosts });
     };
     ws.forEach(w => {
       w.onmessage = ({ data }) => {
