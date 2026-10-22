@@ -4,6 +4,7 @@
 import { AI_MODE_LABELS } from './ai.js';
 import { runGames } from './simPool.js';
 import { getTrained } from './iaEntrenada.js';
+import { BOOST_OPTIONS, boostsFor } from './tienda.js';
 
 const PLAYER_NAMES = ['Lanzziano', 'Jhoabxi'];
 const DAMAGE_SOURCES = [['melle', 'Melle'], ['bala', 'Bala'], ['pinchos', 'Pinchos']];
@@ -11,6 +12,7 @@ const DAMAGE_SOURCES = [['melle', 'Melle'], ['bala', 'Bala'], ['pinchos', 'Pinch
 let count = 20;
 let useTrained = false;
 let startRound = 1; // empezar en una ronda alta para medir enemigos que salen tarde (Tigre, Fuerte)
+let boostKey = 'none'; // objetos de la tienda con los que juega la IA (para medir cuánto ayudan)
 let runningRun = false;
 let cancelled = false;
 
@@ -20,6 +22,9 @@ export function handlePredictionAction(action, btn, section) {
   if (action === 'predict-count') {
     count = +btn.dataset.count || 20;
     section.querySelectorAll('.pred-opt').forEach(b => b.classList.toggle('selected', b === btn));
+  } else if (action === 'predict-boost') {
+    boostKey = btn.dataset.boost || 'none';
+    section.querySelectorAll('.pred-boost-opt').forEach(b => b.classList.toggle('selected', b === btn));
   } else if (action === 'predict-start') {
     startRound = +btn.dataset.round || 1;
     section.querySelectorAll('.pred-start-opt').forEach(b => b.classList.toggle('selected', b === btn));
@@ -55,8 +60,10 @@ async function runPrediction(section) {
   const fill = section.querySelector('.pred-bar-fill');
   const status = section.querySelector('.pred-status');
   const results = section.querySelector('.pred-results');
-  const buttons = section.querySelectorAll('.pred-opt, .pred-ai-opt, .pred-start-opt, .pred-run');
+  const buttons = section.querySelectorAll('.pred-opt, .pred-ai-opt, .pred-start-opt, .pred-boost-opt, .pred-run');
   const from = startRound;
+  const boostLabel = boostKey === 'none' ? '' : `, con objetos: ${BOOST_OPTIONS[boostKey].label}`;
+  const boosts = boostsFor(boostKey);
   buttons.forEach(b => { b.disabled = true; });
   progress.hidden = false;
   results.innerHTML = '';
@@ -66,7 +73,7 @@ async function runPrediction(section) {
   let runs = [];
   const t0 = performance.now();
   try {
-    const jobs = Array.from({ length: n }, (_, i) => ({ seed: i + 1, aiParams, startRound: from }));
+    const jobs = Array.from({ length: n }, (_, i) => ({ seed: i + 1, aiParams, startRound: from, boosts }));
     const { results: played } = await runGames(jobs, {
       isCancelled: () => cancelled,
       onProgress: (done, total) => {
@@ -83,7 +90,7 @@ async function runPrediction(section) {
   fill.style.width = '100%';
   status.textContent = cancelled
     ? `Cancelado tras ${runs.length} partidas`
-    : `${runs.length} partidas con IA ${aiParams ? 'entrenada' : 'original'}${from > 1 ? `, desde la ronda ${from}` : ''}, en ${realSecs.toFixed(1)} s reales`;
+    : `${runs.length} partidas con IA ${aiParams ? 'entrenada' : 'original'}${from > 1 ? `, desde la ronda ${from}` : ''}${boostLabel}, en ${realSecs.toFixed(1)} s reales`;
   if (runs.length) results.innerHTML = renderResults(summarize(runs));
   buttons.forEach(b => { b.disabled = false; });
   refreshPrediction(section);
