@@ -8,6 +8,7 @@ import { initCloud, onCloudChange, isAdmin, currentUser, isRecovering } from './
 import { handleAccountAction, refreshAccount } from './cuenta.js';
 import { getCoins, getActiveBoosts } from './tienda.js';
 import { handleShopAction, refreshShop } from './tiendaUI.js';
+import { initMusic, playSong, setBattleState, sfx, jingle, setDucked, setVolume, getVolume, setMusicEnabled, isMusicEnabled } from './music.js';
 
 const Screens = {
   MENU: 'screen-menu',
@@ -45,6 +46,12 @@ const app = {
     // cuentas (Supabase): el menú se actualiza al entrar/salir; SIMULACIONES solo para el admin
     onCloudChange(() => this.refreshCloudUI());
     initCloud();
+    // Música (music.js): suena desde el primer clic o tecla; la partida avisa de ronda, Tigre, jefe y resultado
+    initMusic();
+    playSong('menu');
+    window.addEventListener('battleState', e => { this._battleState = e.detail; setBattleState(e.detail); });
+    window.addEventListener('battleEnd', e => jingle(e.detail.result));
+    this.bindSettings();
     // CapoCoins: saldo en el menú y en la TIENDA
     window.addEventListener('coinsChanged', () => this.refreshCoins());
     this.refreshCoins();
@@ -119,6 +126,20 @@ const app = {
     if (isRecovering() && this.currentScreen !== Screens.ACCOUNT && this.currentScreen !== Screens.GAME) this.showAccount();
     refreshAccount(document.getElementById(Screens.ACCOUNT));
     this.refreshCoins();
+  },
+
+  // Ajustes: volumen (0-100) y música encendida/apagada; se guardan en el navegador
+  bindSettings(){
+    const range = document.getElementById('vol-range');
+    if (range) {
+      range.value = Math.round(getVolume() * 100);
+      range.addEventListener('input', () => setVolume(range.value / 100));
+    }
+    this.refreshMusicToggle();
+  },
+  refreshMusicToggle(){
+    const btn = document.querySelector('.music-toggle');
+    if (btn) btn.textContent = `Música: ${isMusicEnabled() ? 'ON' : 'OFF'}`;
   },
 
   refreshCoins(){
@@ -210,6 +231,10 @@ const app = {
         break;
       case 'settings':
         this.showScreen(Screens.SETTINGS);
+        break;
+      case 'music-toggle':
+        setMusicEnabled(!isMusicEnabled());
+        this.refreshMusicToggle();
         break;
       case 'credits':
         this.showScreen(Screens.CREDITS);
@@ -369,6 +394,7 @@ const app = {
 
   // al salir de la partida: las simulaciones vuelven al submenú SIMULACIONES
   returnFromGame(){
+    playSong('menu');
     if (this._returnScreen === Screens.SIMS) this.showSims();
     else this.showScreen(Screens.MENU);
   },
@@ -404,18 +430,22 @@ const app = {
       count.innerHTML = `<span class="${cls}">${text}</span>`; // un <span> nuevo reinicia la animación
     };
     try {
+      playSong(null);                         // la música del menú se apaga con el círculo negro
       fx.classList.add('cover');
       await wait(600);
-      if (!(await enter())) return;
+      if (!(await enter())) { playSong('menu'); return; }
       this.hidePauseButton();                 // sin pausa durante la cuenta atrás
       fx.classList.add('reveal');
       for (const [n, cls] of [['3', 'c3'], ['2', 'c2'], ['1', 'c1']]) {
         show(n, cls);
+        sfx('count');
         await wait(800);
       }
       this.gameModule?.releaseHold?.();
       this.showPauseButton();
       show('PELIEN', 'go');
+      sfx('go');
+      playSong(this._battleState?.boss ? 'boss' : 'battle');   // la ronda ya la avisó la partida
       await wait(1000);
     } finally {
       fx.remove();
@@ -492,6 +522,7 @@ const app = {
 
   showPauseOverlay(){
     if (this._pauseOverlayEl) return;
+    setDucked(true);   // en pausa la música baja
     const ov = document.createElement('div');
     ov.id = 'pause-overlay';
     ov.innerHTML = `
@@ -517,6 +548,7 @@ const app = {
   },
 
   hidePauseOverlay(){
+    setDucked(false);
     if (!this._pauseOverlayEl) return;
     try { this._pauseOverlayEl.remove(); } catch(e){}
     this._pauseOverlayEl = null;
