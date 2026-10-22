@@ -22,6 +22,7 @@
         <h2 id="menu-title" class="visually-hidden">Menú principal</h2>
         <nav class="menu" aria-label="Menú principal">
           <button class="menu-btn primary" data-action="play">JUGAR</button>
+          <button class="menu-btn" data-action="shop">TIENDA</button>
           <!-- solo para la cuenta admin (cloud.js / supabase/admin.sql) -->
           <button class="menu-btn admin-only" data-action="sims" hidden>SIMULACIONES</button>
           <button class="menu-btn" data-action="kills">KILLS</button>
@@ -29,9 +30,13 @@
           <button class="menu-btn" data-action="settings">Ajustes</button>
           <button class="menu-btn" data-action="credits">Créditos</button>
         </nav>
+        <p class="menu-coins"><span class="coin-icon" aria-hidden="true"></span><b class="menu-coins-n">0</b> CapoCoins</p>
         <p class="hint">Usa ↑ ↓ y Enter para navegar</p>
         <p class="hint acct-hint"></p>
       </section>
+
+      <!-- Contenido en src/screens/tienda.html (lo carga menu.js) -->
+      <section id="screen-tienda" class="screen" role="dialog" aria-hidden="true"></section>
 
       <!-- Contenido en src/screens/cuenta.html (lo carga menu.js) -->
       <section id="screen-cuenta" class="screen" role="dialog" aria-hidden="true"></section>
