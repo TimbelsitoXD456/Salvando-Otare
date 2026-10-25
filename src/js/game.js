@@ -69,7 +69,7 @@ const ENEMY_TYPES = {
   tigre:  { display: 'Tigre',   color: '#ff8c00', baseHp: 200, baseSpeed: 100, summonCd: 10 },
   oscar:  { display: 'Oscar',   color: '#ec9f33', baseHp: 35,  baseSpeed: 160, shootCd: 0.56, bulletDmg: 10, bulletSpeed: 280 },
   juan:   { display: 'Juan E',  color: '#f8960d', baseHp: 67,  baseSpeed: 140, shootCd: 1.0,  bulletDmg: 20, bulletSpeed: 320 },
-  boss:   { display: 'JEFE',    color: '#ffffff', baseHp: 3000, baseSpeed: 120, attackDamage: 40, summonCd: 8 }
+  boss:   { display: 'JEFE',    color: '#ffffff', baseHp: 3600, baseSpeed: 120, attackDamage: 40, summonCd: 8 }
 };
 
 // helper to create players
@@ -267,7 +267,7 @@ function spawnBoss(canvasW, canvasH) {
   const bossX = Math.min(canvasW - 220, Math.max(220, canvasW * 0.65));
   const boss = makeEnemy('boss', bossX, baseY, currentRound);
   boss.y = canvasH - world.groundOffset - boss.h; // apoyado en el suelo según su altura
-  // en supervivencia cada jefe es más duro: 3000 de vida en la 20, 6000 en la 40, 9000 en la 60...
+  // en supervivencia cada jefe es más duro: 3600 de vida en la 20, 7200 en la 40, 10800 en la 60...
   const bossHp = ENEMY_TYPES.boss.baseHp;
   boss.hp = boss.maxHp = survival ? bossHp * Math.max(1, Math.floor(currentRound / maxRounds)) : bossHp;
   boss.shootTimer = ENEMY_TYPES.boss.summonCd || ENEMY_TYPES.boss.summonCd === 0 ? ENEMY_TYPES.boss.summonCd : 8;
@@ -414,6 +414,10 @@ function newSimStats() {
     healed: [0, 0], food: { spawned: 0, eaten: 0, expired: 0 }
   };
 }
+// ARMADURA (objeto de la TIENDA): los golpes y disparos enemigos hacen menos daño (los pinchos no)
+const ARMOR_REDUCTION = 0.25;
+const armorFactor = () => (boosts.armor ? 1 - ARMOR_REDUCTION : 1);
+
 function addDamage(pi, source, amount) {
   const d = simStats.damage[pi];
   if (d && amount > 0) d[source] += amount;
@@ -478,7 +482,7 @@ function updateEnemies(dt) {
         if (bestDist > e.attackRange - 6) e.targetVx = chaseDir(e, target) * e.speed * 1.3; // el más rápido: persigue a fondo
         else {
           if ((e.attackCooldown || 0) <= 0) {
-            if (!target.parryInvul) { const hpBefore = target.hp; target.hp = Math.max(0, target.hp - ENEMY_TYPES.melle.attackDamage); addDamage(players.indexOf(target), 'melle', hpBefore - target.hp); target.hitFlash = 0.12; target.regenTimer = target.regenDelay; }
+            if (!target.parryInvul) { const hpBefore = target.hp; target.hp = Math.max(0, target.hp - ENEMY_TYPES.melle.attackDamage * armorFactor()); addDamage(players.indexOf(target), 'melle', hpBefore - target.hp); target.hitFlash = 0.12; target.regenTimer = target.regenDelay; }
             else { e.hp -= 8; e.flash = 0.12; e.vx = -dir * 90; e.lastHitBy = players.indexOf(target); if (e.hp <= 0) killEnemy(e); }
             e.attackCooldown = 0.9;
           }
@@ -638,8 +642,8 @@ function killEnemy(e) {
   if (!killer) return;
   if (simulationMode) { simStats.kills[e.lastHitBy]++; return; } // las kills de la IA no cuentan ni dan monedas
   addKill(killer.name);
-  // CapoCoins: 1 por enemigo, 2 por Tigre/Fuerte, 100 por el jefe
-  const coins = coinValue(e.kind);
+  // CapoCoins: 1 por enemigo, 2 por Tigre/Fuerte, 100 por el jefe (el doble con X2 Monedas)
+  const coins = coinValue(e.kind) * (boosts.coinsx2 ? 2 : 1);   // X2 MONEDAS de la tienda
   earnCoins(coins);
   runCoins += coins;
   floatTexts.push({ x: e.x + e.w / 2 - 8, y: e.y - 14, text: `+${coins}`, color: '#ffd24a', life: 1.0 });
@@ -829,7 +833,7 @@ function physicsUpdate(dt) {
         if (rectsOverlap(eb, { x: p.x, y: p.y, w: p.w, h: p.h })) {
           if (!p.parryInvul) {
             const hpBefore = p.hp;
-            p.hp = Math.max(0, p.hp - eb.value);
+            p.hp = Math.max(0, p.hp - eb.value * armorFactor());
             addDamage(pi, 'bala', hpBefore - p.hp);
             p.hitFlash = 0.12;
             p.regenTimer = p.regenDelay;
@@ -1225,7 +1229,10 @@ function render() {
         if (dx > 0) aim = Math.max(-30, Math.min(40, Math.round(Math.atan2(-dy, dx) * 180 / Math.PI / 10) * 10));
       }
     }
+    // con ARMADURA: brillo plateado alrededor del personaje (como en el primer Salvando Otare)
+    if (boosts.armor && p.alive) { ctx.save(); ctx.shadowColor = '#c9d4de'; ctx.shadowBlur = 12 + Math.sin(gameTime * 4) * 3; }
     drawPlayer(ctx, p, { kind, time: gameTime, aim, shooting: kind === 'jhoabxi' && p.shootingCooldown > JHOABXI_SHOOT_CD - 0.07 });
+    if (boosts.armor && p.alive) ctx.restore();
 
     // golpe de Lanzziano: estela blanca delante del puño
     if (p.alive && p.meleeTimer > MELEE.duration * 0.4) {
@@ -1280,7 +1287,7 @@ function render() {
     ctx.fillStyle = '#ffd24a'; ctx.font = '12px "Press Start 2P", monospace';
     ctx.fillText(`${getCoins()}`, hudX + 24, cy + 12);
     if (runCoins > 0) { ctx.fillStyle = '#fff3b0'; ctx.font = '9px "Press Start 2P", monospace'; ctx.fillText(`+${runCoins} esta partida`, hudX + 110, cy + 11); }
-    const active = [['speed', 'x2 VEL'], ['strength', 'x2 FUE'], ['health', 'x2 VIDA'], ['bonkchanti', 'BONKCHANTI']].filter(([k]) => boosts[k]).map(([, t]) => t);
+    const active = [['speed', 'x2 VEL'], ['strength', 'x2 FUE'], ['health', 'x2 VIDA'], ['armor', 'ARMADURA'], ['coinsx2', 'x2 MONEDAS'], ['bonkchanti', 'BONKCHANTI']].filter(([k]) => boosts[k]).map(([, t]) => t);
     if (active.length) { ctx.fillStyle = '#ff6bec'; ctx.font = '8px "Press Start 2P", monospace'; ctx.fillText(active.join('  '), hudX, cy + 30); }
   }
 

@@ -39,7 +39,7 @@ as $$
     ('superv100', 'survival',  100,  1500),
     ('comprador', 'items',     1,    300),
     ('acurar',    'bonkchanti', 1,   490),
-    ('loteria',   'items',     4,    2000)
+    ('loteria',   'items',     6,    2000)
   ) as m(id, kind, goal, reward)
   where m.id = mid;
 $$;
