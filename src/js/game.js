@@ -69,7 +69,7 @@ const ENEMY_TYPES = {
   tigre:  { display: 'Tigre',   color: '#ff8c00', baseHp: 200, baseSpeed: 100, summonCd: 10 },
   oscar:  { display: 'Oscar',   color: '#ec9f33', baseHp: 35,  baseSpeed: 160, shootCd: 0.56, bulletDmg: 10, bulletSpeed: 280 },
   juan:   { display: 'Juan E',  color: '#f8960d', baseHp: 67,  baseSpeed: 140, shootCd: 1.0,  bulletDmg: 20, bulletSpeed: 320 },
-  boss:   { display: 'JEFE',    color: '#ffffff', baseHp: 2000, baseSpeed: 120, attackDamage: 40, summonCd: 8 }
+  boss:   { display: 'JEFE',    color: '#ffffff', baseHp: 3000, baseSpeed: 120, attackDamage: 40, summonCd: 8 }
 };
 
 // helper to create players
@@ -267,8 +267,9 @@ function spawnBoss(canvasW, canvasH) {
   const bossX = Math.min(canvasW - 220, Math.max(220, canvasW * 0.65));
   const boss = makeEnemy('boss', bossX, baseY, currentRound);
   boss.y = canvasH - world.groundOffset - boss.h; // apoyado en el suelo según su altura
-  // en supervivencia cada jefe es más duro: 2000 de vida en la 20, 4000 en la 40, 6000 en la 60...
-  boss.hp = boss.maxHp = survival ? 2000 * Math.max(1, Math.floor(currentRound / maxRounds)) : 2000;
+  // en supervivencia cada jefe es más duro: 3000 de vida en la 20, 6000 en la 40, 9000 en la 60...
+  const bossHp = ENEMY_TYPES.boss.baseHp;
+  boss.hp = boss.maxHp = survival ? bossHp * Math.max(1, Math.floor(currentRound / maxRounds)) : bossHp;
   boss.shootTimer = ENEMY_TYPES.boss.summonCd || ENEMY_TYPES.boss.summonCd === 0 ? ENEMY_TYPES.boss.summonCd : 8;
   enemies.push(boss);
 }
@@ -450,6 +451,9 @@ function shiftWorldY(dy) {
   if (helper) helper.y += dy;
 }
 
+// Jefe: fase de furia al llegar a esta fracción de vida
+const BOSS_RAGE = { at: 0.5, summonCd: 8, orbSpeed: 200, spread: 0.3 };
+
 // enemies AI & actions (implements the specified behaviors)
 function updateEnemies(dt) {
   if (!hasWorld()) return;
@@ -572,6 +576,15 @@ function updateEnemies(dt) {
       }
       if (target) e.targetVx = chaseDir(e, target) * e.speed * 0.4;
     } else if (e.kind === 'boss') {
+      // FASE DE FURIA: con la mitad de la vida, invoca más a menudo, dispara abanicos de 3 bolas más
+      // rápidas y persigue más deprisa
+      if (!e.enraged && e.hp <= e.maxHp * BOSS_RAGE.at) {
+        e.enraged = true;
+        e.rageT = gameTime;
+        floatTexts.push({ x: e.x - 10, y: e.y - 40, text: '¡FURIA!', color: '#ff4040', life: 1.6 });
+        announce('battleState', { round: currentRound, boss: true, rage: true, tigre: false });
+      }
+      const rage = !!e.enraged;
       e.shootTimer = Math.max(0, (e.shootTimer || 0) - dt);
       if (e.shootTimer <= 0) {
         const minCount = 3 + Math.floor(Math.random() * 4);
@@ -585,21 +598,24 @@ function updateEnemies(dt) {
           min.magicSpawn = true;              // aparece con un "puf" de magia verde (solo dibujo)
           enemies.push(min);
         }
-        e.shootTimer = ENEMY_TYPES.boss.summonCd || 8;
+        e.shootTimer = rage ? BOSS_RAGE.summonCd : (ENEMY_TYPES.boss.summonCd || 8);
       }
       if ((e.attackCooldown || 0) <= 0 && Math.random() < 5.4 * dt) {
+        const speed = rage ? BOSS_RAGE.orbSpeed : 160;
+        const spread = rage ? [-BOSS_RAGE.spread, 0, BOSS_RAGE.spread] : [0];   // en furia, abanico de 3
         players.forEach(t => {
           if (!t.alive) return;
           const sx = e.x + e.w/2, sy = e.y + e.h/2;
-          const dx = (t.x + t.w/2) - sx, dy = (t.y + t.h/2) - sy;
-          const len = Math.hypot(dx, dy) || 1;
-          const vx = (dx / len) * 160, vy = (dy / len) * 160;
-          enemyBullets.push({ x: sx, y: sy, w: 12, h: 12, vx, vy, life: 4, value: ENEMY_TYPES.boss.attackDamage || 40, kind: 'enemyDamage', targetKind: 'player', ownerId: e.id, style: 'doom' }); // bola de magia verde (solo dibujo)
+          const base = Math.atan2((t.y + t.h/2) - sy, (t.x + t.w/2) - sx);
+          for (const da of spread) {
+            const a = base + da;
+            enemyBullets.push({ x: sx, y: sy, w: 12, h: 12, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: 4, value: ENEMY_TYPES.boss.attackDamage || 40, kind: 'enemyDamage', targetKind: 'player', ownerId: e.id, style: 'doom' }); // bola de magia verde (solo dibujo)
+          }
         });
-        e.attackCooldown = 1.2 + Math.random() * 1.6;
+        e.attackCooldown = rage ? 1.5 + Math.random() * 1.4 : 1.2 + Math.random() * 1.6;
       }
-      // el jefe avanza despacio hacia el jugador más cercano si está lejos
-      if (target && bestDist > 200) e.targetVx = chaseDir(e, target) * e.speed * 0.5;
+      // el jefe avanza despacio hacia el jugador más cercano si está lejos (en furia, más deprisa)
+      if (target && bestDist > 200) e.targetVx = chaseDir(e, target) * e.speed * (rage ? 0.8 : 0.5);
     }
 
     // physics and cooldowns: acercar vx a targetVx con aceleración limitada
@@ -1148,6 +1164,14 @@ function render() {
       // el Curados mira al compañero que cura; los demás, al jugador más cercano
       const cx = e.x + e.w / 2, cy = e.y + e.h / 2;
       const target = (e.kind === 'curados' && findNearestAllyEnemy(e.id, cx, cy)) || findNearestPlayer(cx, cy);
+      // jefe en FURIA: aura roja que late detrás de él
+      if (e.kind === 'boss' && e.enraged && e.alive) {
+        const pulse = 0.55 + Math.sin(gameTime * 8) * 0.2, R = e.h * 0.95;
+        const glow = ctx.createRadialGradient(cx, cy, 4, cx, cy, R);
+        glow.addColorStop(0, `rgba(255,40,40,${pulse.toFixed(2)})`); glow.addColorStop(1, 'rgba(255,0,0,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+      }
       drawEnemy(ctx, e, { time: gameTime, target });
       if (!e.alive) return;
     } else {
