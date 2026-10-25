@@ -20,15 +20,16 @@
 
       <section id="screen-menu" class="screen active" role="region" aria-labelledby="menu-title">
         <h2 id="menu-title" class="visually-hidden">Menú principal</h2>
-        <nav class="menu" aria-label="Menú principal">
+        <!-- JUGAR arriba a lo ancho y el resto en dos columnas (Créditos está dentro de Ajustes) -->
+        <nav class="menu main-menu" aria-label="Menú principal">
           <button class="menu-btn primary" data-action="play">JUGAR</button>
           <button class="menu-btn" data-action="shop">TIENDA</button>
-          <!-- solo para la cuenta admin (cloud.js / supabase/admin.sql) -->
-          <button class="menu-btn admin-only" data-action="sims" hidden>SIMULACIONES</button>
+          <button class="menu-btn" data-action="ranks">RANKS</button>
           <button class="menu-btn" data-action="kills">KILLS</button>
           <button class="menu-btn acct-btn" data-action="account">CUENTA</button>
-          <button class="menu-btn" data-action="settings">Ajustes</button>
-          <button class="menu-btn" data-action="credits">Créditos</button>
+          <button class="menu-btn settings-btn" data-action="settings">Ajustes</button>
+          <!-- solo para la cuenta admin (cloud.js / supabase/admin.sql) -->
+          <button class="menu-btn admin-only" data-action="sims" hidden>SIMULACIONES</button>
         </nav>
         <p class="menu-coins"><span class="coin-icon" aria-hidden="true"></span><b class="menu-coins-n">0</b> CapoCoins</p>
         <p class="hint">Usa ↑ ↓ y Enter para navegar</p>
@@ -88,6 +89,9 @@
         <div class="actions">
           <button class="menu-btn music-toggle" data-action="music-toggle">Música: ON</button>
         </div>
+        <div class="actions small">
+          <button class="menu-btn" data-action="credits">Créditos</button>
+        </div>
         <div class="actions">
           <button class="menu-btn" data-action="back">Volver</button>
         </div>
@@ -121,6 +125,23 @@
           <p>Gracias por jugar este hermoso juego ademas que me costo mucho hacerlo, junto a los creadores que mencionamos anteriormente pudimos hacer este honorifico juego, ¡actualizandolo dia a dia!. Hasta la Proxima Actualizacion ;)</p>
         </div>
         <div class="actions">
+          <button class="menu-btn" data-action="settings">Volver</button>
+        </div>
+      </section>
+
+      <!-- GLOBAL RANKS: los mejores de todas las cuentas (src/js/ranking.js, supabase/ranking.sql) -->
+      <section id="screen-ranks" class="screen" role="dialog" aria-hidden="true" aria-labelledby="ranks-h">
+        <h2 id="ranks-h">GLOBAL RANKS</h2>
+        <div class="pred-count ranks-tabs" role="group" aria-label="Tabla">
+          <button class="menu-btn" data-action="rank-tab" data-tab="lanzziano">LANZZ.</button>
+          <button class="menu-btn" data-action="rank-tab" data-tab="jhoabxi">JHOAB.</button>
+          <button class="menu-btn" data-action="rank-tab" data-tab="coins">MONEDAS</button>
+        </div>
+        <h3 class="ranks-title"></h3>
+        <div class="ranks-body" aria-live="polite"></div>
+        <p class="ranks-me"></p>
+        <div class="actions">
+          <button class="menu-btn" data-action="rank-reload">Actualizar</button>
           <button class="menu-btn" data-action="back">Volver</button>
         </div>
       </section>
