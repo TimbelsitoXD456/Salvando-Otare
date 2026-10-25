@@ -509,6 +509,38 @@ html,body{height:100%;margin:0;background:var(--bg);font-family:'Press Start 2P'
 .train-good{ color:#7cff7c; }
 .train-bad{ color:#ff6b8b; }
 .train-meh{ color:var(--yellow); }
+/* ---------- menú principal en dos columnas (JUGAR a lo ancho) ---------- */
+.main-menu{ display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px; max-width:440px; margin:0 auto; }
+.main-menu .menu-btn{ width:100%; max-width:none; font-size:13px; padding:14px 8px 14px 22px; }
+.main-menu .menu-btn.primary{ grid-column:1 / -1; }
+.main-menu .menu-btn.primary{ font-size:20px; padding:16px 12px; }
+.main-menu:not(.has-admin) .settings-btn{ grid-column:1 / -1; }
+/* crecer menos para no pisar al botón de al lado */
+.main-menu .menu-btn:hover, .main-menu .menu-btn:focus, .main-menu .menu-btn.focused{ transform:scale(1.05); }
+
+/* ---------- GLOBAL RANKS ---------- */
+#screen-ranks.active{ max-height:calc(100vh - 130px); overflow-y:auto; }
+#screen-ranks h2{ margin:0 0 14px; }
+.ranks-tabs{ gap:6px; }
+.ranks-tabs .menu-btn{ min-width:0; flex:1 1 0; padding:9px 4px; font-size:10px; }
+.ranks-title{ text-align:center; font-size:11px; color:var(--yellow); text-shadow:0 0 8px rgba(255,231,106,0.7); margin:16px 0 8px; }
+.ranks-table{ width:100%; border-collapse:collapse; font-size:10px; }
+.ranks-table th{ color:var(--muted); font-weight:normal; font-size:8px; padding:6px 4px; border-bottom:2px solid rgba(0,229,255,0.4); }
+.ranks-table td{ color:#fff; padding:8px 4px; border-bottom:1px solid rgba(0,229,255,0.15); }
+.ranks-table th:first-child, .ranks-table td:first-child{ width:34px; text-align:center; }
+.ranks-table th:nth-child(2), .ranks-table td:nth-child(2){ text-align:left; overflow-wrap:anywhere; }
+.ranks-table th:last-child, .ranks-table td:last-child{ text-align:right; white-space:nowrap; }
+.ranks-table .coin-icon{ width:12px; height:12px; margin-right:6px; vertical-align:-2px; }
+.ranks-table .coin-icon::after{ font-size:6px; }
+.rank-top1 td{ color:#ffd24a; text-shadow:0 0 8px rgba(255,210,74,0.8); }
+.rank-top2 td{ color:#e4f0ff; }
+.rank-top3 td{ color:#ffb27a; }
+.rank-crown{ font-size:14px; color:#ffd24a; text-shadow:0 0 8px #ffd24a; }
+.rank-me td{ background:rgba(255,43,214,0.18); }
+.ranks-msg{ color:var(--muted); font-size:10px; padding:18px 0; }
+.ranks-error{ color:#ff6b8b; }
+.screen p.ranks-me{ font-size:9px; color:var(--accent); margin:12px 0 0; }
+
 /* créditos: texto largo con scroll propio */
 .credits-text{ max-height:min(52vh, 380px); overflow-y:auto; padding:4px 10px; margin-bottom:14px; text-align:left; }
 .credits-text h3{ font-size:11px; color:var(--pink); margin:14px 0 4px; }
@@ -581,6 +613,9 @@ html,body{height:100%;margin:0;background:var(--bg);font-family:'Press Start 2P'
   .menu{ gap:8px; }
   .menu-btn{ padding:8px 8px; font-size:11px; width:260px; }
   .menu-btn.primary{ font-size:13px; }
+  .main-menu{ gap:8px; }
+  .main-menu .menu-btn{ width:100%; padding:8px 6px 8px 18px; font-size:10px; }
+  .main-menu .menu-btn.primary{ font-size:13px; padding:9px 8px; }
   .hint, .menu-coins{ margin-top:8px; font-size:9px; }
 }
 
