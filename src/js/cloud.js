@@ -170,6 +170,21 @@ export async function setItemActive(item, active) {
   return { ok: true, message: active ? 'Activado.' : 'Desactivado.' };
 }
 
+// ---------- GLOBAL RANKS (supabase/ranking.sql) ----------
+// Mejores jugadores en kills de Lanzziano, kills de Jhoabxi y CapoCoins; también sin cuenta.
+// Devuelve { ok, top: { lanzziano:[{pos,user,value}], jhoabxi:[...], coins:[...] }, me, message }
+export async function fetchRanks(topN = 10) {
+  if (status === 'loading') await new Promise(r => { const off = onCloudChange(() => { if (status !== 'loading') { off(); r(); } }); });
+  if (!sb) return { ok: false, message: 'Sin conexión con el servidor. Revisa tu internet.' };
+  await flushCoins();   // que cuenten las monedas recién ganadas
+  const { data, error } = await sb.rpc('global_ranks', { top_n: topN });
+  if (error) {
+    if ((error.message || '').includes('global_ranks')) return { ok: false, message: 'El ranking aún no está activado en el servidor.' };
+    return { ok: false, message: friendly(error) };
+  }
+  return { ok: true, top: data?.top || {}, me: data?.me || {} };
+}
+
 // Cerrar sesión: el navegador vuelve a ser de invitado, empezando de cero (lo de la cuenta queda en la nube)
 function resetLocalForGuest() {
   replaceKills({});
