@@ -4,7 +4,7 @@
 import { AI_MODE_LABELS } from './ai.js';
 import { runGames } from './simPool.js';
 import { getTrained } from './iaEntrenada.js';
-import { BOOST_OPTIONS, boostsFor } from './tienda.js';
+import { boostsFor, boostLabel as describeBoosts } from './tienda.js';
 
 const PLAYER_NAMES = ['Lanzziano', 'Jhoabxi'];
 const DAMAGE_SOURCES = [['melle', 'Melle'], ['bala', 'Bala'], ['pinchos', 'Pinchos']];
@@ -12,7 +12,7 @@ const DAMAGE_SOURCES = [['melle', 'Melle'], ['bala', 'Bala'], ['pinchos', 'Pinch
 let count = 20;
 let useTrained = false;
 let startRound = 1; // empezar en una ronda alta para medir enemigos que salen tarde (Tigre, Fuerte)
-let boostKey = 'none'; // objetos de la tienda con los que juega la IA (para medir cuánto ayudan)
+let boostKey = 'mine'; // objetos de la tienda con los que juega la IA (para medir cuánto ayudan)
 let runningRun = false;
 let cancelled = false;
 
@@ -62,7 +62,7 @@ async function runPrediction(section) {
   const results = section.querySelector('.pred-results');
   const buttons = section.querySelectorAll('.pred-opt, .pred-ai-opt, .pred-start-opt, .pred-boost-opt, .pred-run');
   const from = startRound;
-  const boostLabel = boostKey === 'none' ? '' : `, con objetos: ${BOOST_OPTIONS[boostKey].label}`;
+  const boostLabel = boostKey === 'none' ? '' : `, con objetos: ${describeBoosts(boostKey)}`;
   const boosts = boostsFor(boostKey);
   buttons.forEach(b => { b.disabled = true; });
   progress.hidden = false;

@@ -6,7 +6,7 @@ import { getTrained } from './iaEntrenada.js';
 import { startMenuBackground } from './menuBackground.js';
 import { initCloud, onCloudChange, isAdmin, currentUser, isRecovering } from './cloud.js';
 import { handleAccountAction, refreshAccount } from './cuenta.js';
-import { getCoins, getActiveBoosts } from './tienda.js';
+import { getCoins, getActiveBoosts, boostLabel } from './tienda.js';
 import { handleShopAction, refreshShop } from './tiendaUI.js';
 import { refreshRanks, handleRanksAction } from './ranking.js';
 import { refreshMissions, handleMissionAction, refreshMissionBadge } from './misionesUI.js';
@@ -253,7 +253,7 @@ const app = {
       case 'simulate':
         // partida en la que una IA controla a cada jugador (ai.js); usa la IA entrenada si hay una guardada
         if (!isAdmin()) break;
-        this.launchGame({ simulation: true, aiParams: getTrained()?.params ?? null, startRound: this.simStartRound });
+        this.launchGame({ simulation: true, aiParams: getTrained()?.params ?? null, startRound: this.simStartRound, boosts: getActiveBoosts() });
         break;
       case 'sim-round':
         this.setSimStartRound(+btn.dataset.round || 1);
@@ -371,7 +371,7 @@ const app = {
   // Submenú SIMULACIONES, con una línea que dice qué IA se está usando
   showSims(){
     const status = document.querySelector(`#${Screens.SIMS} .sims-ai-status`);
-    if (status) status.textContent = `IA en uso: ${getTrained() ? 'ENTRENADA' : 'original'} · ← → elige la ronda`;
+    if (status) status.textContent = `IA en uso: ${getTrained() ? 'ENTRENADA' : 'original'} · ${boostLabel('mine')} · ← → elige la ronda`;
     this.showScreen(Screens.SIMS);
   },
 

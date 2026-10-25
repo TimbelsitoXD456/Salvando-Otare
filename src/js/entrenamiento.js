@@ -11,7 +11,7 @@ import { AI_PARAM_SPACE, DEFAULT_AI_PARAMS, normalizeAIParams } from './ai.js';
 import { runGames, workerCount } from './simPool.js';
 import { getTrained, saveTrained, clearTrained } from './iaEntrenada.js';
 import { summarize } from './prediccion.js';
-import { BOOST_OPTIONS, boostsFor } from './tienda.js';
+import { BOOST_OPTIONS, boostsFor, boostLabel } from './tienda.js';
 
 const VARIANTS = 9;              // mutaciones por generación (+ el campeón = 10 candidatos)
 const GAMES_PER_VARIANT = 40;
@@ -24,7 +24,7 @@ const SIGMA_START = 0.15;        // tamaño de la mutación, en fracción del ra
 const SIGMA_END = 0.05;          // ...que se va afinando hasta este valor en la última generación
 
 let generations = 20;
-let boostKey = 'none';   // objetos de la tienda con los que entrena (tienda.js BOOST_OPTIONS)
+let boostKey = 'mine';   // objetos de la tienda con los que entrena (tienda.js BOOST_OPTIONS)
 let running = false;
 let cancelled = false;
 let pending = null; // resultado del último entrenamiento, a la espera de Guardar / Descartar
@@ -75,7 +75,7 @@ export function refreshTraining(section) {
   const games = generations * (VARIANTS + 1) * GAMES_PER_VARIANT + 2 * VALIDATION_GAMES;
   const mins = Math.max(1, Math.round(games * SECONDS_PER_GAME / workerCount() / 60));
   const trainedWith = trained?.boosts && trained.boosts !== 'none' ? ` (entrenada con objetos: ${BOOST_OPTIONS[trained.boosts]?.label})` : '';
-  const withBoosts = boostKey === 'none' ? 'sin objetos' : `con objetos: ${BOOST_OPTIONS[boostKey].label}`;
+  const withBoosts = boostKey === 'none' ? 'sin objetos' : `con objetos: ${boostLabel(boostKey)}`;
   section.querySelector('.train-start').textContent =
     `Parte de: ${trained ? 'la IA entrenada guardada' + trainedWith : 'la IA original'} · entrena ${withBoosts} · ${games} partidas · ≈${mins} min (${workerCount()} núcleos)`;
   section.querySelector('.train-reset-row').hidden = !trained;

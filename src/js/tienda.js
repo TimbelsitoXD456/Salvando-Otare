@@ -16,7 +16,9 @@ export const ITEMS = {
 };
 
 // Opciones del selector "Objetos" de Predicción y Entrenamiento (simular con objetos de la tienda)
+// 'mine' = los objetos que el jugador (el admin) tiene comprados y activos ahora mismo
 export const BOOST_OPTIONS = {
+  mine:     { label: 'Mis objetos', boosts: null },
   none:     { label: 'Ninguno',   boosts: {} },
   speed:    { label: 'Velocidad', boosts: { speed: true } },
   strength: { label: 'Fuerza',    boosts: { strength: true } },
@@ -24,7 +26,14 @@ export const BOOST_OPTIONS = {
   bonk:     { label: 'BonkChanti', boosts: { bonkchanti: true } },
   all:      { label: 'Todos',     boosts: { speed: true, strength: true, health: true, bonkchanti: true } }
 };
-export const boostsFor = key => ({ ...(BOOST_OPTIONS[key] || BOOST_OPTIONS.none).boosts });
+// Texto de una opción: 'Mis objetos (VEL, FUE, VIDA, BONK)'
+const SHORT = { speed: 'VEL', strength: 'FUE', health: 'VIDA', bonkchanti: 'BONK' };
+export function boostLabel(key) {
+  if (key !== 'mine') return (BOOST_OPTIONS[key] || BOOST_OPTIONS.none).label;
+  const on = Object.entries(getActiveBoosts()).filter(([, v]) => v).map(([k]) => SHORT[k] || k);
+  return `Mis objetos (${on.length ? on.join(', ') : 'ninguno activo'})`;
+}
+export const boostsFor = key => key === 'mine' ? getActiveBoosts() : ({ ...(BOOST_OPTIONS[key] || BOOST_OPTIONS.none).boosts });
 
 export function coinValue(kind) {
   if (kind === 'boss') return 100;
