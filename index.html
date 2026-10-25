@@ -62,6 +62,25 @@
 
       <section id="screen-settings" class="screen" role="dialog" aria-hidden="true">
         <h2>Ajustes</h2>
+        <!-- Controles (src/js/controles.js) -->
+        <div class="pred-count settings-row" role="group" aria-label="Dispositivo">
+          <span>Dispositivo:</span>
+          <button class="menu-btn" data-action="set-device" data-value="pc">PC</button>
+          <button class="menu-btn" data-action="set-device" data-value="mobile">Móvil</button>
+        </div>
+        <div class="pred-count settings-row only-pc" role="group" aria-label="Jugadores en PC">
+          <span>Jugadores:</span>
+          <button class="menu-btn" data-action="set-pcplayers" data-value="both" title="Los dos con el mismo teclado">2 JUG.</button>
+          <button class="menu-btn" data-action="set-pcplayers" data-value="lanzziano" title="Juegas con Lanzziano; Jhoabxi lo maneja la IA">LANZZ.</button>
+          <button class="menu-btn" data-action="set-pcplayers" data-value="jhoabxi" title="Juegas con Jhoabxi; Lanzziano lo maneja la IA">JHOAB.</button>
+        </div>
+        <p class="pred-help only-pc">Con un solo jugador, el compañero lo maneja la IA y puedes usar flechas o WASD.</p>
+        <div class="pred-count settings-row only-mobile" role="group" aria-label="Personaje en móvil" hidden>
+          <span>Personaje:</span>
+          <button class="menu-btn" data-action="set-mobilechar" data-value="lanzziano">Lanzziano</button>
+          <button class="menu-btn" data-action="set-mobilechar" data-value="jhoabxi">Jhoabxi</button>
+        </div>
+        <p class="pred-help only-mobile" hidden>En el móvil juegas con un personaje y botones en pantalla; el otro lo maneja la IA.</p>
         <label>
           <span>Volumen</span>
           <input id="vol-range" type="range" min="0" max="100" value="60">
