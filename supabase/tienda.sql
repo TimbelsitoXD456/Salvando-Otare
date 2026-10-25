@@ -29,6 +29,7 @@ as $$
     when 'speed'    then 200   -- X2 Velocidad
     when 'strength' then 300   -- X2 Fuerza
     when 'health'   then 500   -- X2 Vida
+    when 'bonkchanti' then 1250 -- ayudante BonkChanti
   end;
 $$;
 

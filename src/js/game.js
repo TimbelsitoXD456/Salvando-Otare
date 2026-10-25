@@ -7,6 +7,7 @@ import { FOOD_TYPES, FOOD_LIFETIME, FOOD_SPAWN_FIRST, FOOD_SPAWN_INTERVAL, FOOD_
   randomFoodKind, drawFood, drawFloatText } from './food.js';
 import { drawPlayer } from './playerSprites.js';
 import { drawEnemy, drawPill, drawEnergyBall, HAS_SPRITE } from './enemySprites.js';
+import { drawBonkChanti, drawHeartOrb } from './ayudantes.js';
 
 let canvas, ctx, loopHandle, resizeObserver;
 let players = [];
@@ -18,6 +19,8 @@ let foods = [];        // comida en el mapa (food.js)
 let floatTexts = [];   // textos "+25" al comer
 let foodSpawnTimer = FOOD_SPAWN_FIRST;
 let gameTime = 0;      // reloj de la partida (anima la comida)
+let helper = null;     // ayudante BonkChanti (objeto de la TIENDA), o null
+let heartOrbs = [];    // corazones curativos que lanza BonkChanti
 let world = { 
   gravity: 1800, 
   groundOffset: 80,
@@ -322,6 +325,9 @@ function setupPlayers(canvasW, canvasH) {
     if (boosts.strength) { p.meleeDamage *= 2; p.bulletDamage *= 2; }
     if (boosts.health) { p.maxHp *= 2; p.hp = p.maxHp; }
   }
+  // ayudante BonkChanti: aparece junto a Lanzziano
+  helper = boosts.bonkchanti ? { x: players[0].x - 30, y: players[0].y + 20, facing: 1, cooldown: BONK.firstThrow, throwT: null } : null;
+  heartOrbs = [];
   runCoins = 0;
   simStats = newSimStats();
   bullets = []; enemyBullets = []; enemies = [];
@@ -438,9 +444,10 @@ function resizeCanvasInternal() {
 }
 
 function shiftWorldY(dy) {
-  for (const list of [players, enemies, bullets, enemyBullets, platforms, foods, floatTexts]) {
+  for (const list of [players, enemies, bullets, enemyBullets, platforms, foods, floatTexts, heartOrbs]) {
     for (const o of list) o.y += dy;
   }
+  if (helper) helper.y += dy;
 }
 
 // enemies AI & actions (implements the specified behaviors)
@@ -706,6 +713,60 @@ function updateFoods(dt) {
   }
 }
 
+// --- Ayudante BonkChanti (dibujo en ayudantes.js) ---
+// En el primer Salvando Otare curaba 20 de vida cada medio segundo (40 por segundo, con 100 de vida
+// máxima): aquí los jugadores tienen más vida, se regeneran solos y hay comida, así que cura menos y
+// más despacio, pero en plena pelea (cuando la regeneración no funciona). No revive a nadie.
+const BONK = {
+  speed: 320,        // vuela hacia el jugador más herido (px/s)
+  heal: 20,          // vida por corazón (los mismos 20 del primer juego)
+  cooldown: 2.0,     // segundos entre corazones (en el primer juego, 0.5)
+  firstThrow: 2.0,
+  minMissing: 12,    // no gasta corazones si al jugador le falta muy poca vida
+  orbSpeed: 380,     // los corazones persiguen al jugador
+  orbLife: 2.5
+};
+
+function updateHelper(dt, W) {
+  if (!helper) return;
+  // a quién cuida: el vivo con menos vida (en proporción)
+  let target = null;
+  for (const p of players) if (p.alive && (!target || p.hp / p.maxHp < target.hp / target.maxHp)) target = p;
+  if (target) {
+    // flota detrás del jugador, por encima de su hombro (sin taparle), sin salirse de la pantalla
+    const cx = target.x + target.w / 2;
+    const wantX = Math.max(world.cameraX + 24, Math.min(world.cameraX + W - 24, cx - target.facing * 56));
+    const wantY = target.y - 6;
+    const dx = wantX - helper.x, dy = wantY - helper.y, d = Math.hypot(dx, dy);
+    if (d > 1) { const step = Math.min(d, BONK.speed * dt); helper.x += dx / d * step; helper.y += dy / d * step; }
+    if (Math.abs(cx - helper.x) > 4) helper.facing = Math.sign(cx - helper.x);
+    helper.cooldown -= dt;
+    if (helper.cooldown <= 0 && target.maxHp - target.hp >= BONK.minMissing) {
+      heartOrbs.push({ x: helper.x + helper.facing * 10, y: helper.y - 28, w: 12, h: 12, target, life: BONK.orbLife });
+      helper.cooldown = BONK.cooldown;
+      helper.throwT = gameTime;
+    }
+  }
+  // corazones: persiguen a su jugador y lo curan al tocarlo
+  for (let i = heartOrbs.length - 1; i >= 0; i--) {
+    const o = heartOrbs[i], t = o.target;
+    o.life -= dt;
+    if (o.life <= 0 || !t.alive) { heartOrbs.splice(i, 1); continue; }
+    const dx = (t.x + t.w / 2) - o.x, dy = (t.y + t.h * 0.4) - o.y, d = Math.hypot(dx, dy) || 1;
+    o.x += dx / d * BONK.orbSpeed * dt; o.y += dy / d * BONK.orbSpeed * dt;
+    if (d < 20) {
+      const healed = Math.min(BONK.heal, t.maxHp - t.hp);
+      if (healed > 0) {
+        t.hp += healed;
+        const pi = players.indexOf(t);
+        if (pi >= 0) simStats.healed[pi] += healed;
+        floatTexts.push({ x: t.x + t.w / 2 - 10, y: t.y - 10, text: `+${Math.round(healed)}`, color: '#7cff7c', life: 1.0 });
+      }
+      heartOrbs.splice(i, 1);
+    }
+  }
+}
+
 // PHYSICS: movimientos + manejo de ataques, collisions and regen
 function physicsUpdate(dt) {
   if (!hasWorld()) return;
@@ -967,7 +1028,7 @@ function physicsUpdate(dt) {
     }
   }); // end players.forEach
 
-  if (!gameOver) updateFoods(dt);
+  if (!gameOver) { updateFoods(dt); updateHelper(dt, W); }
   updateCamera(W);
 
   // advance rounds when enemies dead
@@ -1168,6 +1229,10 @@ function render() {
     }
   });
 
+  // ayudante BonkChanti y sus corazones
+  if (helper) drawBonkChanti(ctx, helper, gameTime);
+  heartOrbs.forEach(o => drawHeartOrb(ctx, o, gameTime));
+
   floatTexts.forEach(t => drawFloatText(ctx, t));
 
   ctx.restore(); // fin del espacio del mundo: el HUD y overlays se dibujan fijos en pantalla
@@ -1191,7 +1256,7 @@ function render() {
     ctx.fillStyle = '#ffd24a'; ctx.font = '12px "Press Start 2P", monospace';
     ctx.fillText(`${getCoins()}`, hudX + 24, cy + 12);
     if (runCoins > 0) { ctx.fillStyle = '#fff3b0'; ctx.font = '9px "Press Start 2P", monospace'; ctx.fillText(`+${runCoins} esta partida`, hudX + 110, cy + 11); }
-    const active = [['speed', 'x2 VEL'], ['strength', 'x2 FUE'], ['health', 'x2 VIDA']].filter(([k]) => boosts[k]).map(([, t]) => t);
+    const active = [['speed', 'x2 VEL'], ['strength', 'x2 FUE'], ['health', 'x2 VIDA'], ['bonkchanti', 'BONKCHANTI']].filter(([k]) => boosts[k]).map(([, t]) => t);
     if (active.length) { ctx.fillStyle = '#ff6bec'; ctx.font = '8px "Press Start 2P", monospace'; ctx.fillText(active.join('  '), hudX, cy + 30); }
   }
 
@@ -1210,7 +1275,9 @@ function render() {
   ctx.fillStyle = '#fff';
   if (hudSmall) {
     ctx.font = '8px "Press Start 2P", monospace';
-    ctx.fillText(`Enemigos vivos: ${enemies.filter(e => e.alive).length}`, hudX, hudY + players.length * 26 + (simulationMode ? 12 : 42));
+    // (más abajo si hay objetos activos: su línea va justo debajo de las monedas)
+    const boostLine = !simulationMode && Object.values(boosts).some(Boolean) ? 14 : 0;
+    ctx.fillText(`Enemigos vivos: ${enemies.filter(e => e.alive).length}`, hudX, hudY + players.length * 26 + (simulationMode ? 12 : 42) + boostLine);
   } else {
     ctx.font = '10px "Press Start 2P", monospace';
     ctx.fillText(`Enemigos vivos: ${enemies.filter(e => e.alive).length}`, 12, H - 12);
@@ -1352,7 +1419,7 @@ export function stop() {
   else window.removeEventListener('resize', resizeCanvasInternal);
   if (canvas) canvas.removeEventListener('click', handleGameOverClick);
   gameOver = false; gameOverType = ''; lastGroundY = null;
-  canvas = null; ctx = null; players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; onResizeCallback = null; resetInput();
+  canvas = null; ctx = null; players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; helper = null; heartOrbs = []; onResizeCallback = null; resetInput();
 }
 // --- Modo predicción ---
 // Corre una partida de simulación IA completa sin canvas ni requestAnimationFrame: física con dt fijo
@@ -1418,7 +1485,7 @@ export function runHeadless({ seed = 1, maxSeconds = 600, onProgress, isCancelle
       };
       headlessView = null; headlessBusy = false; simulationMode = false; aiParams = null; boosts = {};
       gameOver = false; gameOverType = '';
-      players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = [];
+      players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; helper = null; heartOrbs = [];
       resolve(result);
     };
     const chunk = () => {

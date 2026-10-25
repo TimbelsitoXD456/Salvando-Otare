@@ -21,6 +21,7 @@ export const MISSIONS = [
   { id: 'superv60',  name: 'CUANDO ACABA!?',             desc: 'Llega a la ronda 60 en el modo supervivencia.',  kind: 'survival',  goal: 60,   reward: 1050 },
   { id: 'superv100', name: 'Como Llegamos hasta aqui?!', desc: 'Llega a la ronda 100 en el modo supervivencia.', kind: 'survival',  goal: 100,  reward: 1500 },
   { id: 'comprador', name: 'Comprador',                  desc: 'Compra un objeto en la tienda.',                 kind: 'items',     goal: 1,    reward: 300 },
+  { id: 'acurar',    name: 'A Curar',                    desc: 'Compra a BonkChanti.',                           kind: 'bonkchanti', goal: 1,   reward: 490 },
   { id: 'loteria',   name: 'LOTERIA',                    desc: 'Compra TODA LA TIENDA.',                         kind: 'items',     goal: Object.keys(ITEMS).length, reward: 2000 }
 ];
 
@@ -34,6 +35,7 @@ function current(kind) {
     case 'wins': return getWins();
     case 'survival': return getBestSurvival();
     case 'items': return Object.keys(getItems()).length;
+    case 'bonkchanti': return 'bonkchanti' in getItems() ? 1 : 0;
     default: return 0;
   }
 }

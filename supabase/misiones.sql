@@ -38,7 +38,8 @@ as $$
     ('superv60',  'survival',  60,   1050),
     ('superv100', 'survival',  100,  1500),
     ('comprador', 'items',     1,    300),
-    ('loteria',   'items',     3,    2000)
+    ('acurar',    'bonkchanti', 1,   490),
+    ('loteria',   'items',     4,    2000)
   ) as m(id, kind, goal, reward)
   where m.id = mid;
 $$;
@@ -68,6 +69,7 @@ begin
     when 'survival'  then pr.best_survival
     when 'wins'      then pr.wins
     when 'items'     then (select count(*) from jsonb_object_keys(pr.items))
+    when 'bonkchanti' then case when pr.items ? 'bonkchanti' then 1 else 0 end
     when 'lanzziano' then case when jsonb_typeof(pr.kills->'Lanzziano') = 'number' then floor((pr.kills->>'Lanzziano')::numeric) else 0 end
     when 'jhoabxi'   then case when jsonb_typeof(pr.kills->'Jhoabxi')   = 'number' then floor((pr.kills->>'Jhoabxi')::numeric)   else 0 end
     else 0 end;

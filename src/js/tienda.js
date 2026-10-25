@@ -10,7 +10,9 @@
 export const ITEMS = {
   speed:    { name: 'X2 Velocidad', price: 200, desc: 'Los dos corren el doble de rápido.' },
   strength: { name: 'X2 Fuerza',    price: 300, desc: 'Puños y balas hacen el doble de daño.' },
-  health:   { name: 'X2 Vida',      price: 500, desc: 'Los dos empiezan con el doble de vida.' }
+  health:   { name: 'X2 Vida',      price: 500, desc: 'Los dos empiezan con el doble de vida.' },
+  // ayudante (del primer Salvando Otare): vuela junto al jugador más herido y le lanza corazones (game.js)
+  bonkchanti: { name: 'BonkChanti', price: 1250, desc: 'Ayudante: vuela junto al más herido y le lanza corazones que curan.' }
 };
 
 // Opciones del selector "Objetos" de Predicción y Entrenamiento (simular con objetos de la tienda)
@@ -19,7 +21,8 @@ export const BOOST_OPTIONS = {
   speed:    { label: 'Velocidad', boosts: { speed: true } },
   strength: { label: 'Fuerza',    boosts: { strength: true } },
   health:   { label: 'Vida',      boosts: { health: true } },
-  all:      { label: 'Todos',     boosts: { speed: true, strength: true, health: true } }
+  bonk:     { label: 'BonkChanti', boosts: { bonkchanti: true } },
+  all:      { label: 'Todos',     boosts: { speed: true, strength: true, health: true, bonkchanti: true } }
 };
 export const boostsFor = key => ({ ...(BOOST_OPTIONS[key] || BOOST_OPTIONS.none).boosts });
 
@@ -62,7 +65,8 @@ export function getPending() { load(); return pending; }
 // Objetos comprados y activados → efectos para la partida
 export function getActiveBoosts() {
   load();
-  return { speed: wallet.items.speed === true, strength: wallet.items.strength === true, health: wallet.items.health === true };
+  return { speed: wallet.items.speed === true, strength: wallet.items.strength === true, health: wallet.items.health === true,
+    bonkchanti: wallet.items.bonkchanti === true };
 }
 
 export function earnCoins(n) {
