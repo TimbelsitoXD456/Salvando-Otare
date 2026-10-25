@@ -8,6 +8,8 @@ import { initCloud, onCloudChange, isAdmin, currentUser, isRecovering } from './
 import { handleAccountAction, refreshAccount } from './cuenta.js';
 import { getCoins, getActiveBoosts } from './tienda.js';
 import { handleShopAction, refreshShop } from './tiendaUI.js';
+import { getControlPrefs, setControlPref, controlModes } from './controles.js';
+import { createTouchControls, removeTouchControls } from './touch.js';
 import { initMusic, playSong, setBattleState, sfx, jingle, setDucked, setVolume, getVolume, setMusicEnabled, isMusicEnabled } from './music.js';
 
 const Screens = {
@@ -136,7 +138,30 @@ const app = {
       range.addEventListener('input', () => setVolume(range.value / 100));
     }
     this.refreshMusicToggle();
+    this.refreshControlSettings();
   },
+  // Opciones de control para la partida: quién maneja a cada jugador, botones táctiles y la IA compañera
+  // (la original; la entrenada si eres admin y tienes una guardada)
+  controlOptions(){
+    const controls = controlModes();
+    const touchIdx = controls.indexOf('touch');
+    const touch = touchIdx >= 0 ? createTouchControls(this.appEl, touchIdx === 0 ? 'melee' : 'shooter') : null;
+    const partnerAi = isAdmin() ? getTrained()?.params ?? null : null;
+    return { controls, touch, partnerAi };
+  },
+
+  // Ajustes de control: marca las opciones elegidas y muestra solo las del dispositivo
+  refreshControlSettings(){
+    const prefs = getControlPrefs();
+    const mark = (action, value) => document.querySelectorAll(`[data-action="${action}"]`)
+      .forEach(b => b.classList.toggle('selected', b.dataset.value === value));
+    mark('set-device', prefs.device);
+    mark('set-pcplayers', prefs.pcPlayers);
+    mark('set-mobilechar', prefs.mobileChar);
+    document.querySelectorAll('.only-pc').forEach(el => { el.hidden = prefs.device !== 'pc'; });
+    document.querySelectorAll('.only-mobile').forEach(el => { el.hidden = prefs.device !== 'mobile'; });
+  },
+
   refreshMusicToggle(){
     const btn = document.querySelector('.music-toggle');
     if (btn) btn.textContent = `Música: ${isMusicEnabled() ? 'ON' : 'OFF'}`;
@@ -173,7 +198,14 @@ const app = {
   handleAction(action, btn){
     switch(action){
       case 'play':
-        this.launchGame({ boosts: getActiveBoosts() });   // objetos de la TIENDA activos
+        // objetos de la TIENDA activos + controles de Ajustes (2 jugadores, solo con IA, o móvil)
+        this.launchGame({ boosts: getActiveBoosts(), ...this.controlOptions() });
+        break;
+      case 'set-device':
+      case 'set-pcplayers':
+      case 'set-mobilechar':
+        setControlPref({ 'set-device': 'device', 'set-pcplayers': 'pcPlayers', 'set-mobilechar': 'mobileChar' }[action], btn.dataset.value);
+        this.refreshControlSettings();
         break;
       case 'shop':
         this.showLoadedScreen(Screens.SHOP, 'src/screens/tienda.html', refreshShop);
@@ -300,6 +332,7 @@ const app = {
   },
 
   showScreen(screenId){
+    if (screenId !== Screens.GAME) removeTouchControls();   // los botones táctiles solo en partida
     if (screenId !== Screens.PREDICTION) cancelPrediction();
     if (screenId !== Screens.TRAINING) cancelTraining();
     Object.values(Screens).forEach(id => {
@@ -453,7 +486,7 @@ const app = {
     }
   },
 
-  async startGame({ simulation = false, aiParams = null, startRound = 1, hold = false, boosts = null } = {}){
+  async startGame({ simulation = false, aiParams = null, startRound = 1, hold = false, boosts = null, controls = null, touch = null, partnerAi = null } = {}){
     this._returnScreen = simulation ? Screens.SIMS : Screens.MENU;
     this.showScreen(Screens.GAME);
     try {
@@ -462,7 +495,7 @@ const app = {
       this.gameModule = m;
       // si se viene de una predicción cancelada, esperar a que suelte la partida sin canvas
       while (m.isBusy()) await new Promise(r => setTimeout(r, 20));
-      m.start({ canvas: this.canvas, onResize: () => this.resizeCanvasToDisplaySize(), simulation, aiParams, startRound, hold, boosts });
+      m.start({ canvas: this.canvas, onResize: () => this.resizeCanvasToDisplaySize(), simulation, aiParams, startRound, hold, boosts, controls, touch, partnerAi });
       // ensure pause button visible
       this.showPauseButton();
     } catch (err) {
