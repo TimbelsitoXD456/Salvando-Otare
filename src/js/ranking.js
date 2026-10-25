@@ -1,11 +1,13 @@
 // ranking.js - pantalla GLOBAL RANKS: los mejores de todos los jugadores con cuenta (Supabase,
-// supabase/ranking.sql). Tres tablas: más kills con Lanzziano, más kills con Jhoabxi y más CapoCoins.
+// supabase/ranking.sql). Cuatro tablas: más kills con Lanzziano, más kills con Jhoabxi, más CapoCoins
+// y ronda más alta en supervivencia.
 import { fetchRanks, currentUser } from './cloud.js';
 
 const TABS = {
   lanzziano: { title: 'MOST KILLS · LANZZIANO', unit: 'kills' },
   jhoabxi:   { title: 'MOST KILLS · JHOABXI',   unit: 'kills' },
-  coins:     { title: 'MÁS CAPOCOINS',          unit: 'CapoCoins' }
+  coins:     { title: 'MÁS CAPOCOINS',          unit: 'CapoCoins' },
+  survival:  { title: 'SUPERVIVENCIA · RONDA',  unit: 'ronda' }
 };
 
 let tab = 'lanzziano';
@@ -62,6 +64,6 @@ function render(section) {
   // tu posición, aunque no estés en el top 10
   const my = data.me?.[tab];
   if (!currentUser()) mine.textContent = 'Inicia sesión en CUENTA para aparecer en el ranking.';
-  else if (my) mine.textContent = `Tu puesto: #${my.pos} con ${fmt(my.value)} ${TABS[tab].unit}`;
+  else if (my) mine.textContent = `Tu puesto: #${my.pos} · ${tab === 'survival' ? `ronda ${fmt(my.value)}` : `${fmt(my.value)} ${TABS[tab].unit}`}`;
   else mine.textContent = 'Aún no tienes puntos en esta tabla.';
 }

@@ -24,16 +24,41 @@
         <nav class="menu main-menu" aria-label="Menú principal">
           <button class="menu-btn primary" data-action="play">JUGAR</button>
           <button class="menu-btn" data-action="shop">TIENDA</button>
+          <button class="menu-btn" data-action="missions">MISIONES</button>
           <button class="menu-btn" data-action="ranks">RANKS</button>
           <button class="menu-btn" data-action="kills">KILLS</button>
           <button class="menu-btn acct-btn" data-action="account">CUENTA</button>
-          <button class="menu-btn settings-btn" data-action="settings">Ajustes</button>
+          <button class="menu-btn" data-action="settings">Ajustes</button>
           <!-- solo para la cuenta admin (cloud.js / supabase/admin.sql) -->
           <button class="menu-btn admin-only" data-action="sims" hidden>SIMULACIONES</button>
         </nav>
         <p class="menu-coins"><span class="coin-icon" aria-hidden="true"></span><b class="menu-coins-n">0</b> CapoCoins</p>
         <p class="hint">Usa ↑ ↓ y Enter para navegar</p>
         <p class="hint acct-hint"></p>
+      </section>
+
+      <!-- JUGAR: elegir modo (SUPERVIVENCIA se desbloquea al vencer al jefe) -->
+      <section id="screen-modo" class="screen" role="region" aria-labelledby="modo-title" aria-hidden="true">
+        <h2 id="modo-title">MODO DE JUEGO</h2>
+        <nav class="menu" aria-label="Modo de juego">
+          <button class="menu-btn primary" data-action="play-normal">NORMAL</button>
+          <button class="menu-btn mode-survival" data-action="play-survival">SUPERVIVENCIA</button>
+          <button class="menu-btn" data-action="back">Volver</button>
+        </nav>
+        <p class="pred-help mode-help">Normal: 20 rondas y el jefe final.<br>Supervivencia: rondas sin fin y un jefe cada 20.</p>
+        <p class="hint survival-lock"></p>
+      </section>
+
+      <!-- MISIONES (src/js/misiones.js y misionesUI.js) -->
+      <section id="screen-misiones" class="screen" role="dialog" aria-hidden="true" aria-labelledby="mis-title">
+        <h2 id="mis-title">MISIONES</h2>
+        <p class="mis-summary"></p>
+        <p class="pred-help mis-guest" hidden>Puedes avanzar sin cuenta, pero para cobrar las CapoCoins inicia sesión en CUENTA.</p>
+        <div class="mis-list"></div>
+        <p class="acct-msg mis-msg" aria-live="polite"></p>
+        <div class="actions">
+          <button class="menu-btn" data-action="back">Volver</button>
+        </div>
       </section>
 
       <!-- Contenido en src/screens/tienda.html (lo carga menu.js) -->
@@ -136,6 +161,7 @@
           <button class="menu-btn" data-action="rank-tab" data-tab="lanzziano">LANZZ.</button>
           <button class="menu-btn" data-action="rank-tab" data-tab="jhoabxi">JHOAB.</button>
           <button class="menu-btn" data-action="rank-tab" data-tab="coins">MONEDAS</button>
+          <button class="menu-btn" data-action="rank-tab" data-tab="survival">SUPERV.</button>
         </div>
         <h3 class="ranks-title"></h3>
         <div class="ranks-body" aria-live="polite"></div>

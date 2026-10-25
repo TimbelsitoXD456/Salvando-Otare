@@ -45,3 +45,25 @@ export function recordRound(round) {
 export function replaceBestRound(round) {
   try { localStorage.setItem(BEST_ROUND_KEY, String(Math.max(0, Math.floor(Number(round) || 0)))); } catch (e) {}
 }
+
+// ---------- modo SUPERVIVENCIA y victorias (para las misiones) ----------
+const BEST_SURVIVAL_KEY = 'salvandoOtare.bestSurvival';  // ronda más alta en supervivencia
+const WINS_KEY = 'salvandoOtare.wins';                   // veces que se venció al jefe en modo normal
+
+const readInt = key => { try { return Math.max(0, Math.floor(Number(localStorage.getItem(key)) || 0)); } catch (e) { return 0; } };
+const writeInt = (key, n) => { try { localStorage.setItem(key, String(Math.max(0, Math.floor(Number(n) || 0)))); } catch (e) {} };
+
+export const getBestSurvival = () => readInt(BEST_SURVIVAL_KEY);
+export function recordSurvivalRound(round) {
+  if (round <= getBestSurvival()) return;
+  writeInt(BEST_SURVIVAL_KEY, round);
+  changed();
+}
+export const replaceBestSurvival = n => writeInt(BEST_SURVIVAL_KEY, n);
+
+export const getWins = () => readInt(WINS_KEY);
+export function addWin() { writeInt(WINS_KEY, getWins() + 1); changed(); }
+export const replaceWins = n => writeInt(WINS_KEY, n);
+
+// Supervivencia: se desbloquea al vencer al jefe del modo normal
+export const survivalUnlocked = () => getWins() > 0;

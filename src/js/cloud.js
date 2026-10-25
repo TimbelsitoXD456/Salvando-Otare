@@ -6,7 +6,9 @@
 //   con sesión iniciada, se sube a la fila del jugador (cada uno solo puede leer/escribir la suya: RLS).
 // - Admin: la cuenta con app_metadata.role = 'admin' (supabase/admin.sql) ve SIMULACIONES.
 // - Sin conexión con Supabase (sin internet, file://...), el juego funciona igual en modo invitado.
-import { getKills, replaceKills, getBestRound, replaceBestRound, PLAYERS } from './kills.js';
+import { getKills, replaceKills, getBestRound, replaceBestRound, PLAYERS,
+  getBestSurvival, replaceBestSurvival, getWins, replaceWins } from './kills.js';
+import { setClaimed } from './misiones.js';
 import { getTrained, replaceTrained } from './iaEntrenada.js';
 import { getPending, clearPending, setWallet, resetWallet } from './tienda.js';
 
@@ -18,6 +20,11 @@ const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+
 
 const OWNER_KEY = 'salvandoOtare.owner'; // de qué cuenta es el progreso guardado en este navegador
 const PUSH_DELAY = 1500;
+const BASE_COLS = 'kills, best_round, trained_ai, capocoins, items';
+const MISSION_COLS = 'best_survival, wins, missions';   // columnas de supabase/misiones.sql
+let missionCols = true;   // false si el servidor aún no tiene esas columnas
+// error de Supabase por una columna que no existe
+const missingColumn = error => /column|best_survival|wins|missions/i.test(error?.message || '') && /exist|find|schema/i.test(error?.message || '');
 
 let sb = null;
 let session = null;
@@ -94,7 +101,12 @@ async function loadProfile() {
 async function syncOnLogin() {
   const uid = session.user.id;
   syncState = 'syncing'; notify();
-  const { data: row, error } = await sb.from('progress').select('kills, best_round, trained_ai, capocoins, items').eq('user_id', uid).maybeSingle();
+  let { data: row, error } = await sb.from('progress').select(`${BASE_COLS}, ${MISSION_COLS}`).eq('user_id', uid).maybeSingle();
+  if (error && missingColumn(error)) {
+    // supabase/misiones.sql aún sin ejecutar: seguir con lo de antes (sin misiones ni supervivencia)
+    missionCols = false;
+    ({ data: row, error } = await sb.from('progress').select(BASE_COLS).eq('user_id', uid).maybeSingle());
+  }
   if (error) { console.warn('No se pudo leer el progreso:', error); syncState = 'error'; return; }
   const owner = getOwner();
   const cloudKills = row?.kills || {};
@@ -107,6 +119,11 @@ async function syncOnLogin() {
   }
   replaceKills(kills);
   replaceBestRound(guest || mine ? Math.max(row?.best_round || 0, getBestRound()) : (row?.best_round || 0));
+  // supervivencia: el máximo; victorias: las de invitado se suman, las de esta cuenta el máximo
+  replaceBestSurvival(guest || mine ? Math.max(row?.best_survival || 0, getBestSurvival()) : (row?.best_survival || 0));
+  const cloudWins = row?.wins || 0;
+  replaceWins(guest ? cloudWins + getWins() : mine ? Math.max(cloudWins, getWins()) : cloudWins);
+  setClaimed(row?.missions || {});
   if (row?.trained_ai) replaceTrained(row.trained_ai);
   else if (!(guest || mine)) replaceTrained(null);
   // CapoCoins: el saldo y los objetos los manda la cuenta; las ganadas sin subir (de invitado o sin
@@ -170,6 +187,26 @@ export async function setItemActive(item, active) {
   return { ok: true, message: active ? 'Activado.' : 'Desactivado.' };
 }
 
+// ---------- MISIONES (supabase/misiones.sql) ----------
+// Cobrar una misión cumplida: lo comprueba el servidor. Devuelve { ok, message }
+export async function claimMission(id) {
+  if (!sb || !session) return { ok: false, message: 'Inicia sesión en CUENTA para cobrar las misiones.' };
+  clearTimeout(pushTimer);
+  await push();   // que el servidor tenga las kills y rondas de ahora mismo
+  const { data, error } = await sb.rpc('claim_mission', { mid: id });
+  if (error) {
+    const m = error.message || '';
+    if (m.includes('ya_cobrada')) return { ok: false, message: 'Esa misión ya la cobraste.' };
+    if (m.includes('no_cumplida')) return { ok: false, message: 'Todavía no está cumplida en tu cuenta.' };
+    if (m.includes('claim_mission') || m.includes('mission_info')) return { ok: false, message: 'Las misiones aún no están activadas en el servidor.' };
+    return { ok: false, message: shopError(error) };
+  }
+  setClaimed(data.missions);
+  setWallet({ coins: data.capocoins });
+  notify();
+  return { ok: true, message: `¡+${data.reward} CapoCoins!` };
+}
+
 // ---------- GLOBAL RANKS (supabase/ranking.sql) ----------
 // Mejores jugadores en kills de Lanzziano, kills de Jhoabxi y CapoCoins; también sin cuenta.
 // Devuelve { ok, top: { lanzziano:[{pos,user,value}], jhoabxi:[...], coins:[...] }, me, message }
@@ -190,6 +227,9 @@ function resetLocalForGuest() {
   replaceKills({});
   replaceBestRound(0);
   replaceTrained(null);
+  replaceBestSurvival(0);
+  replaceWins(0);
+  setClaimed({});
   resetWallet();
   setOwner(null);
   syncState = 'idle';
@@ -205,13 +245,20 @@ async function push() {
   if (!session || !sb) return;
   syncState = 'syncing'; notify();
   const trained = getTrained();
-  const { error } = await sb.from('progress').upsert({
+  const data = {
     user_id: session.user.id,
     kills: getKills(),
     best_round: getBestRound(),
     trained_ai: trained ? { ...trained } : null,
     updated_at: new Date().toISOString()
-  });
+  };
+  if (missionCols) Object.assign(data, { best_survival: getBestSurvival(), wins: getWins() });
+  let { error } = await sb.from('progress').upsert(data);
+  if (error && missionCols && missingColumn(error)) {
+    missionCols = false;   // supabase/misiones.sql aún sin ejecutar: guardar lo de siempre
+    delete data.best_survival; delete data.wins;
+    ({ error } = await sb.from('progress').upsert(data));
+  }
   syncState = error ? 'error' : 'synced';
   if (error) console.warn('No se pudo guardar el progreso en la nube (se reintentará):', error);
   notify();

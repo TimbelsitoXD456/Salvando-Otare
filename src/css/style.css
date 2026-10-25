@@ -512,9 +512,38 @@ html,body{height:100%;margin:0;background:var(--bg);font-family:'Press Start 2P'
 /* ---------- menú principal en dos columnas (JUGAR a lo ancho) ---------- */
 .main-menu{ display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px; max-width:440px; margin:0 auto; }
 .main-menu .menu-btn{ width:100%; max-width:none; font-size:13px; padding:14px 8px 14px 22px; }
-.main-menu .menu-btn.primary{ grid-column:1 / -1; }
+.main-menu .menu-btn.primary, .main-menu .admin-only{ grid-column:1 / -1; }
 .main-menu .menu-btn.primary{ font-size:20px; padding:16px 12px; }
-.main-menu:not(.has-admin) .settings-btn{ grid-column:1 / -1; }
+/* MISIONES con recompensas por cobrar: borde dorado */
+.main-menu .menu-btn.has-ready{ border-color:#ffd24a; color:#fff3b0; text-shadow:0 0 8px rgba(255,210,74,0.9); }
+
+/* ---------- MODO DE JUEGO ---------- */
+#screen-modo .mode-help{ margin:18px 0 0; }
+#screen-modo .survival-lock{ color:var(--yellow); font-size:9px; }
+
+/* ---------- MISIONES ---------- */
+#screen-misiones.active{ max-height:calc(100vh - 130px); overflow-y:auto; }
+#screen-misiones h2{ margin:0 0 6px; }
+.screen p.mis-summary{ margin:0 0 10px; font-size:10px; color:var(--accent); }
+.mis-list{ display:flex; flex-direction:column; gap:8px; }
+.mis-item{
+  display:grid; grid-template-columns:1fr auto; align-items:center; gap:10px; padding:10px;
+  background:rgba(8,2,24,0.72); border:2px solid rgba(0,229,255,0.35); border-radius:4px;
+}
+.mis-item.ready{ border-color:#ffd24a; box-shadow:0 0 12px rgba(255,210,74,0.45); }
+.mis-item.claimed{ opacity:.55; }
+.mis-info{ display:flex; flex-direction:column; gap:5px; text-align:left; min-width:0; }
+.mis-name{ font-weight:normal; font-size:10px; color:#fff; }
+.mis-desc{ font-size:8px; line-height:1.6; color:var(--muted); }
+.mis-bar{ height:6px; background:rgba(0,0,0,0.5); border-radius:2px; overflow:hidden; }
+.mis-bar span{ display:block; height:100%; background:linear-gradient(90deg, var(--accent), var(--pink)); }
+.mis-item.ready .mis-bar span{ background:#ffd24a; }
+.mis-meta{ font-size:8px; color:#ffd24a; }
+.mis-meta .coin-icon{ width:10px; height:10px; margin-right:4px; vertical-align:-2px; }
+.mis-meta .coin-icon::after{ font-size:5px; }
+.mis-btn.menu-btn{ width:auto; min-width:84px; padding:9px 6px; font-size:9px; animation:none; }
+.mis-btn.menu-btn::before{ display:none; }
+.mis-done{ min-width:84px; text-align:center; font-size:18px; color:#7cff7c; text-shadow:0 0 8px #7cff7c; }
 /* crecer menos para no pisar al botón de al lado */
 .main-menu .menu-btn:hover, .main-menu .menu-btn:focus, .main-menu .menu-btn.focused{ transform:scale(1.05); }
 
@@ -522,7 +551,7 @@ html,body{height:100%;margin:0;background:var(--bg);font-family:'Press Start 2P'
 #screen-ranks.active{ max-height:calc(100vh - 130px); overflow-y:auto; }
 #screen-ranks h2{ margin:0 0 14px; }
 .ranks-tabs{ gap:6px; }
-.ranks-tabs .menu-btn{ min-width:0; flex:1 1 0; padding:9px 4px; font-size:10px; }
+.ranks-tabs .menu-btn{ min-width:0; flex:1 1 0; padding:9px 2px; font-size:9px; }
 .ranks-title{ text-align:center; font-size:11px; color:var(--yellow); text-shadow:0 0 8px rgba(255,231,106,0.7); margin:16px 0 8px; }
 .ranks-table{ width:100%; border-collapse:collapse; font-size:10px; }
 .ranks-table th{ color:var(--muted); font-weight:normal; font-size:8px; padding:6px 4px; border-bottom:2px solid rgba(0,229,255,0.4); }

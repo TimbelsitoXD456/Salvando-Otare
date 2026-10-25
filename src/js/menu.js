@@ -9,6 +9,8 @@ import { handleAccountAction, refreshAccount } from './cuenta.js';
 import { getCoins, getActiveBoosts } from './tienda.js';
 import { handleShopAction, refreshShop } from './tiendaUI.js';
 import { refreshRanks, handleRanksAction } from './ranking.js';
+import { refreshMissions, handleMissionAction, refreshMissionBadge } from './misionesUI.js';
+import { survivalUnlocked } from './kills.js';
 import { getControlPrefs, setControlPref, controlModes } from './controles.js';
 import { createTouchControls, removeTouchControls } from './touch.js';
 import { initMusic, playSong, setBattleState, sfx, jingle, setDucked, setVolume, getVolume, setMusicEnabled, isMusicEnabled } from './music.js';
@@ -24,6 +26,8 @@ const Screens = {
   SETTINGS: 'screen-settings',
   CREDITS: 'screen-credits',
   RANKS: 'screen-ranks',
+  MODE: 'screen-modo',
+  MISSIONS: 'screen-misiones',
   GAME: 'screen-game'
 };
 
@@ -59,6 +63,8 @@ const app = {
     // CapoCoins: saldo en el menú y en la TIENDA
     window.addEventListener('coinsChanged', () => this.refreshCoins());
     this.refreshCoins();
+    // MISIONES: el botón del menú avisa de las que ya se pueden cobrar
+    window.addEventListener('progressChanged', () => refreshMissions(document.getElementById(Screens.MISSIONS)));
     // fondo animado de Otare (no se dibuja mientras se juega: el canvas del juego lo tapa)
     startMenuBackground(document.querySelector('.otare-bg'), () => this.currentScreen !== Screens.GAME);
     // REINTENTAR en la pantalla de derrota/victoria: el menú hace la cuenta atrás
@@ -93,7 +99,7 @@ const app = {
     });
 
     document.addEventListener('keydown', (e) => {
-      if (this.currentScreen !== Screens.MENU && this.currentScreen !== Screens.SIMS) return;
+      if (![Screens.MENU, Screens.SIMS, Screens.MODE].includes(this.currentScreen)) return;
       if (e.key === 'ArrowDown') { e.preventDefault(); this.focusNext(); }
       if (e.key === 'ArrowUp') { e.preventDefault(); this.focusPrev(); }
       if (e.key === 'Enter') { e.preventDefault(); this.activateFocused(); }
@@ -118,8 +124,6 @@ const app = {
   refreshCloudUI(){
     const admin = isAdmin();
     document.querySelectorAll('.admin-only').forEach(el => { el.hidden = !admin; });
-    // sin SIMULACIONES, Ajustes ocupa la última fila entera del menú
-    document.querySelector('.main-menu')?.classList.toggle('has-admin', admin);
     const user = currentUser();
     const acctBtn = document.querySelector('.acct-btn');
     if (acctBtn) acctBtn.textContent = user ? 'MI CUENTA' : 'CUENTA';
@@ -175,6 +179,7 @@ const app = {
     const n = document.querySelector('.menu-coins-n');
     if (n) n.textContent = getCoins();
     refreshShop(document.getElementById(Screens.SHOP));
+    refreshMissions(document.getElementById(Screens.MISSIONS));
   },
 
   showAccount(){
@@ -202,8 +207,22 @@ const app = {
   handleAction(action, btn){
     switch(action){
       case 'play':
+        this.showMode();
+        break;
+      case 'play-normal':
+      case 'play-survival': {
+        const survival = action === 'play-survival';
+        if (survival && !survivalUnlocked() && !isAdmin()) break;
         // objetos de la TIENDA activos + controles de Ajustes (2 jugadores, solo con IA, o móvil)
-        this.launchGame({ boosts: getActiveBoosts(), ...this.controlOptions() });
+        this.launchGame({ boosts: getActiveBoosts(), ...this.controlOptions(), survival });
+        break;
+      }
+      case 'missions':
+        this.showScreen(Screens.MISSIONS);
+        refreshMissions(document.getElementById(Screens.MISSIONS));
+        break;
+      case 'mission-claim':
+        handleMissionAction(action, btn, document.getElementById(Screens.MISSIONS));
         break;
       case 'set-device':
       case 'set-pcplayers':
@@ -336,6 +355,19 @@ const app = {
     this.showScreen(screenId);
   },
 
+  // JUGAR → elegir modo. SUPERVIVENCIA bloqueada hasta vencer al jefe (el admin siempre puede, para probar)
+  showMode(){
+    const open = survivalUnlocked() || isAdmin();
+    const btn = document.querySelector('.mode-survival');
+    if (btn) {
+      btn.disabled = !open;
+      btn.textContent = open ? 'SUPERVIVENCIA' : '🔒 SUPERVIVENCIA';
+    }
+    const lock = document.querySelector('.survival-lock');
+    if (lock) lock.textContent = open ? '' : 'Vence al jefe de la ronda 20 para desbloquear SUPERVIVENCIA';
+    this.showScreen(Screens.MODE);
+  },
+
   // Submenú SIMULACIONES, con una línea que dice qué IA se está usando
   showSims(){
     const status = document.querySelector(`#${Screens.SIMS} .sims-ai-status`);
@@ -355,7 +387,7 @@ const app = {
       el.setAttribute('aria-hidden', active ? 'false' : 'true');
     });
     this.currentScreen = screenId;
-    if (screenId === Screens.MENU || screenId === Screens.SIMS) {
+    if (screenId === Screens.MENU || screenId === Screens.SIMS || screenId === Screens.MODE) {
       this.updateFocusable();
       this.focusButton(0);
     } else {
@@ -498,7 +530,7 @@ const app = {
     }
   },
 
-  async startGame({ simulation = false, aiParams = null, startRound = 1, hold = false, boosts = null, controls = null, touch = null, partnerAi = null } = {}){
+  async startGame({ simulation = false, aiParams = null, startRound = 1, hold = false, boosts = null, controls = null, touch = null, partnerAi = null, survival = false } = {}){
     this._returnScreen = simulation ? Screens.SIMS : Screens.MENU;
     this.showScreen(Screens.GAME);
     try {
@@ -507,7 +539,7 @@ const app = {
       this.gameModule = m;
       // si se viene de una predicción cancelada, esperar a que suelte la partida sin canvas
       while (m.isBusy()) await new Promise(r => setTimeout(r, 20));
-      m.start({ canvas: this.canvas, onResize: () => this.resizeCanvasToDisplaySize(), simulation, aiParams, startRound, hold, boosts, controls, touch, partnerAi });
+      m.start({ canvas: this.canvas, onResize: () => this.resizeCanvasToDisplaySize(), simulation, aiParams, startRound, hold, boosts, controls, touch, partnerAi, survival });
       // ensure pause button visible
       this.showPauseButton();
     } catch (err) {

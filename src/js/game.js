@@ -1,6 +1,6 @@
 import { isDown, wasPressed, resetInput } from './engine/input.js';
 import { createLoop } from './engine/loop.js';
-import { addKill, recordRound } from './kills.js';
+import { addKill, recordRound, recordSurvivalRound, addWin } from './kills.js';
 import { coinValue, earnCoins, getCoins } from './tienda.js';
 import { createAI } from './ai.js';
 import { FOOD_TYPES, FOOD_LIFETIME, FOOD_SPAWN_FIRST, FOOD_SPAWN_INTERVAL, FOOD_MAX_ON_MAP, FOOD_SIZE,
@@ -35,6 +35,7 @@ let startRound = 1;  // ronda en la que empieza la simulación (para ver enemigo
 let introHold = false; // congelado durante la cuenta atrás 3, 2, 1, PELIEN (se dibuja pero no avanza)
 let boosts = {};       // objetos de la TIENDA activos en esta partida: { speed, strength, health } (tienda.js)
 let runCoins = 0;      // CapoCoins ganadas en esta partida
+let survival = false;  // modo SUPERVIVENCIA: rondas infinitas, un jefe cada 20 (no se gana: se aguanta)
 let onResizeCallback = null;
 let lastGroundY = null; // altura del suelo en el último resize (null = partida sin crear)
 
@@ -94,7 +95,8 @@ function makePlayer(name, x, y, color, controls) {
 function makeEnemy(kind, x, y, round = 1, opts = {}) {
   const tpl = ENEMY_TYPES[kind] || ENEMY_TYPES.melle;
   const hp = Math.round((tpl.baseHp || 30) + Math.max(0, round - 1) * 6 + Math.random() * 12);
-  const speed = (tpl.baseSpeed || 60) + Math.round((round - 1) * 4); 
+  // (la velocidad deja de subir en la ronda 30: en supervivencia serían imposibles de esquivar)
+  const speed = (tpl.baseSpeed || 60) + Math.round((Math.min(round, 30) - 1) * 4);
   const display = opts.displayName || tpl.display;
   const color = opts.colorOverride || tpl.color;
   // tamaño de cada tipo (el Tigre grande; Oscar y Juan E pequeños)
@@ -262,7 +264,8 @@ function spawnBoss(canvasW, canvasH) {
   const bossX = Math.min(canvasW - 220, Math.max(220, canvasW * 0.65));
   const boss = makeEnemy('boss', bossX, baseY, currentRound);
   boss.y = canvasH - world.groundOffset - boss.h; // apoyado en el suelo según su altura
-  boss.hp = 2000; boss.maxHp = 2000;
+  // en supervivencia cada jefe es más duro: 2000 de vida en la 20, 4000 en la 40, 6000 en la 60...
+  boss.hp = boss.maxHp = survival ? 2000 * Math.max(1, Math.floor(currentRound / maxRounds)) : 2000;
   boss.shootTimer = ENEMY_TYPES.boss.summonCd || ENEMY_TYPES.boss.summonCd === 0 ? ENEMY_TYPES.boss.summonCd : 8;
   enemies.push(boss);
 }
@@ -336,12 +339,14 @@ function announce(type, detail) {
   window.dispatchEvent(new CustomEvent(type, { detail }));
 }
 function announceRound() {
-  announce('battleState', { round: currentRound, boss: currentRound >= maxRounds, tigre: enemies.some(e => e.kind === 'tigre') });
+  announce('battleState', { round: currentRound, boss: isBossRound(currentRound), tigre: enemies.some(e => e.kind === 'tigre') });
 }
+// Ronda del jefe: la 20 en modo normal; en supervivencia, cada 20 (20, 40, 60...)
+const isBossRound = round => survival ? round % maxRounds === 0 : round >= maxRounds;
 
 function spawnEnemiesForRound(round, canvasW, canvasH) {
   enemies = [];
-  if (round >= maxRounds) { spawnBoss(canvasW, canvasH); announceRound(); return; }
+  if (isBossRound(round)) { spawnBoss(canvasW, canvasH); announceRound(); return; }
   const baseY = canvasH - world.groundOffset - 52;
   // ensure round 1 => 3 enemies; then increase
   const count = Math.min(3 + Math.floor((round - 1) * 1.2), 40);
@@ -969,12 +974,20 @@ function physicsUpdate(dt) {
   if (!gameOver) {
     const aliveEnemies = enemies.filter(e => e.alive);
     if (aliveEnemies.length === 0) {
-      if (currentRound >= maxRounds) {
+      if (!survival && currentRound >= maxRounds) {
         triggerVictory();
       } else {
         if (roundAdvanceTimer <= 0) roundAdvanceTimer = timeBetweenRounds;
         roundAdvanceTimer -= dt;
         if (roundAdvanceTimer <= 0) {
+          // supervivencia: tras vencer a un jefe, los vivos recuperan toda la vida
+          if (survival && isBossRound(currentRound)) {
+            players.forEach(p => {
+              if (!p.alive) return;
+              floatTexts.push({ x: p.x, y: p.y - 18, text: `+${Math.round(p.maxHp - p.hp)}`, color: '#7cff7c', life: 1.4 });
+              p.hp = p.maxHp;
+            });
+          }
           currentRound++;
           spawnEnemiesForRound(currentRound, world.mapWidth, H);
           roundAdvanceTimer = 0;
@@ -1006,12 +1019,17 @@ function updateCamera(W) {
 // el loop sigue corriendo (update ya se salta con gameOver) para que el overlay se redibuje, p. ej. al redimensionar
 function triggerDefeat() { if (gameOver) return; gameOver = true; gameOverType = 'defeat'; saveBestRound(); announce('battleEnd', { result: 'defeat' }); }
 function triggerVictory() { if (gameOver) return; gameOver = true; gameOverType = 'victory'; saveBestRound(); announce('battleEnd', { result: 'victory' }); }
-// ronda más alta del jugador (solo partidas de verdad: las simulaciones no cuentan);
+// ronda más alta del jugador (solo partidas de verdad: las simulaciones no cuentan); en supervivencia
+// se guarda aparte, y vencer al jefe del modo normal cuenta como victoria (misiones, desbloquea supervivencia).
 // 'runFinished' avisa a cloud.js para subir las CapoCoins ganadas
 function saveBestRound() {
   if (simulationMode) return;
-  recordRound(currentRound);
-  window.dispatchEvent(new CustomEvent('runFinished'));
+  if (survival) recordSurvivalRound(currentRound);
+  else {
+    recordRound(currentRound);
+    if (gameOverType === 'victory') addWin();
+  }
+  window.dispatchEvent(new CustomEvent('runFinished', { detail: { survival, round: currentRound, result: gameOverType } }));
 }
 
 // render function
@@ -1184,7 +1202,7 @@ function render() {
   const px = W - panelW - 18, py = 18;
   ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(px, py, panelW, panelH);
   ctx.fillStyle = '#cfe'; ctx.font = `${small ? 9 : 12}px "Press Start 2P", monospace`;
-  ctx.fillText(`Ronda: ${currentRound}/${maxRounds}${simulationMode ? (aiParams ? '   [IA ENTRENADA' : '   [SIMULACIÓN IA') + (startRound > 1 ? ` · desde ${startRound}]` : ']') : ''}`, px + 12, py + 18);
+  ctx.fillText(`Ronda: ${survival ? `${currentRound} · SUPERVIVENCIA` : `${currentRound}/${maxRounds}`}${simulationMode ? (aiParams ? '   [IA ENTRENADA' : '   [SIMULACIÓN IA') + (startRound > 1 ? ` · desde ${startRound}]` : ']') : ''}`, px + 12, py + 18);
   ctx.font = `${small ? 7 : 10}px "Press Start 2P", monospace`;
   legend.forEach((line, i) => ctx.fillText(line, px + 12, py + (small ? 34 : 40) + i * (small ? 16 : 22)));
 
@@ -1204,10 +1222,11 @@ function render() {
   if (gameOver) {
     ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(0,0,W,H);
     ctx.fillStyle = '#fff'; ctx.font = '28px "Press Start 2P", monospace';
-    const text = gameOverType === 'victory' ? 'VICTORIA' : 'DERROTA';
+    const text = survival ? 'FIN' : gameOverType === 'victory' ? 'VICTORIA' : 'DERROTA';
     const tw = ctx.measureText(text).width; ctx.fillText(text, (W - tw) / 2, H / 2 - 50);
     ctx.font = '12px "Press Start 2P", monospace';
-    const sub = gameOverType === 'victory' ? '¡Has completado las rondas!' : 'Todos los jugadores han caído';
+    const sub = survival ? `Aguantaste hasta la ronda ${currentRound}`
+      : gameOverType === 'victory' ? '¡Has completado las rondas!' : 'Todos los jugadores han caído';
     const sw = ctx.measureText(sub).width; ctx.fillText(sub, (W - sw) / 2, H / 2 - 20);
     if (simulationMode) {
       const secs = Math.floor(simStats.time), mm = Math.floor(secs / 60), ss = String(secs % 60).padStart(2, '0');
@@ -1283,11 +1302,12 @@ function update(dt) {
 // hold: true = empieza congelado hasta releaseHold() (cuenta atrás del menú)
 // boosts: objetos de la TIENDA activos ({ speed, strength, health }); no se aplican en simulación
 // controls: ['keys'|'solo'|'touch'|'ai', ...] por jugador (controles.js); touch: entrada táctil (touch.js);
-// partnerAi: parámetros de la IA compañera (null = la original)
+// partnerAi: parámetros de la IA compañera (null = la original); survival: modo SUPERVIVENCIA
 export function start({ canvas: suppliedCanvas, onResize, simulation = false, aiParams: params = null, startRound: round = 1, hold = false, boosts: shopBoosts = null,
-  controls = null, touch = null, partnerAi = null } = {}) {
+  controls = null, touch = null, partnerAi = null, survival: survivalMode = false } = {}) {
   if (running || headlessBusy) return;
   running = true; paused = false; gameOver = false; gameOverType = ''; onResizeCallback = onResize || null;
+  survival = !simulation && !!survivalMode;
   introHold = !!hold;
   simulationMode = !!simulation;
   boosts = simulationMode ? {} : { ...(shopBoosts || {}) };
@@ -1357,6 +1377,7 @@ function clampRound(r) { return Math.max(1, Math.min(maxRounds, Math.floor(r) ||
 export function runHeadless({ seed = 1, maxSeconds = 600, onProgress, isCancelled, aiParams: params = null, chunked = true, startRound: round = 1, boosts: simBoosts = null } = {}) {
   if (running || headlessBusy) return Promise.reject(new Error('Ya hay una partida en marcha.'));
   headlessBusy = true;
+  survival = false;
   aiParams = params;
   boosts = { ...(simBoosts || {}) };
   startRound = clampRound(round);
