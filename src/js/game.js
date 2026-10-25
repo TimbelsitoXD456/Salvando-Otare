@@ -275,14 +275,43 @@ function keyboardInput(controls) {
   };
 }
 
+// Jugando solo en PC: el personaje elegido responde a las DOS distribuciones de teclas (flechas o WASD),
+// y el ataque (golpe o disparo, según el personaje) a M, F o J
+const SOLO_KEYS = {
+  left: ['ArrowLeft', 'KeyA'], right: ['ArrowRight', 'KeyD'], jump: ['ArrowUp', 'KeyW', 'Space'],
+  parry: ['ArrowDown', 'KeyS'], dash: ['Enter', 'KeyX', 'ShiftLeft'], attack: ['KeyM', 'KeyF', 'KeyJ']
+};
+function soloKeyboardInput(attackAction) {
+  const keysFor = action => SOLO_KEYS[action === attackAction ? 'attack' : action] || [];
+  return {
+    isDown: action => keysFor(action).some(k => isDown(k)),
+    // se consulta cada tecla (wasPressed consume la pulsación de cada una)
+    wasPressed: action => keysFor(action).reduce((hit, k) => wasPressed(k) || hit, false)
+  };
+}
+
+// Quién controla a cada jugador [Lanzziano, Jhoabxi] (controles.js): 'keys' | 'solo' | 'touch' | 'ai'
+let controlModes = ['keys', 'keys'];
+let touchInput = null;        // botones táctiles (touch.js), si algún jugador es 'touch'
+let partnerAiParams = null;   // IA compañera (original, o la entrenada si eres admin)
+
+function playerInput(i, p) {
+  const role = i === 0 ? 'melee' : 'shooter';
+  if (simulationMode) return createAI(role, aiParams);
+  const mode = controlModes[i];
+  if (mode === 'ai') return createAI(role, partnerAiParams);
+  if (mode === 'touch' && touchInput) return touchInput;
+  if (mode === 'solo') return soloKeyboardInput(i === 0 ? 'melee' : 'shoot');
+  return keyboardInput(p.controls);
+}
+
 function setupPlayers(canvasW, canvasH) {
   players = [
     makePlayer('Lanzziano', 100, canvasH - world.groundOffset - 56, '#ffd400', { left: 'ArrowLeft', right: 'ArrowRight', jump: 'ArrowUp', parry: 'ArrowDown', dash: 'Enter', melee: 'KeyM' }),
     makePlayer('Jhoabxi',   200, canvasH - world.groundOffset - 56, '#003366', { left: 'KeyA', right: 'KeyD', jump: 'KeyW', parry: 'KeyS', dash: 'KeyX', shoot: 'KeyF' })
   ];
-  // fuente de controles de cada jugador: IA en simulación, teclado en partida normal
-  players[0].input = simulationMode ? createAI('melee', aiParams) : keyboardInput(players[0].controls);
-  players[1].input = simulationMode ? createAI('shooter', aiParams) : keyboardInput(players[1].controls);
+  // fuente de controles de cada jugador: IA en simulación; en partida, según los Ajustes
+  players.forEach((p, i) => { p.input = playerInput(i, p); });
   // objetos de la TIENDA: en partidas de verdad, los activos del jugador; en simulación, ninguno salvo
   // que Predicción / Entrenamiento los pidan (runHeadless({ boosts }))
   for (const p of players) {
@@ -494,8 +523,10 @@ function updateEnemies(dt) {
         e.wanderTimer = 1 + Math.random() * 2;
       }
       e.targetVx = e.wanderDir * e.speed * 0.6;
-      if (e.shootTimer <= 0) {
+      // cada Tigre invoca UNA sola horda en toda su vida (antes era cada 10 s y las hordas se acumulaban)
+      if (!e.summonedHorde && e.shootTimer <= 0) {
         spawnTigerMinions(e);
+        e.summonedHorde = true;
         e.flash = 0.25;
       }
     } else if (e.kind === 'oscar') {
@@ -1110,11 +1141,12 @@ function render() {
     ctx.fillStyle = p.alive ? '#fff' : 'rgba(255,255,255,0.5)';
     const nameY = p.alive ? p.y - 18 : p.y + p.h - 34;
     ctx.fillText(p.name, Math.round(cx - ctx.measureText(p.name).width / 2), Math.round(nameY));
-    // en simulación: qué está decidiendo la IA de este jugador
-    if (p.alive && simulationMode && p.input.label) {
+    // jugador manejado por la IA (simulación o compañero): qué está decidiendo
+    if (p.alive && p.input.think && p.input.label) {
       const urgent = p.input.mode === 'retreat' || p.input.mode === 'highGround';
+      const label = simulationMode ? p.input.label : `IA · ${p.input.label}`;
       ctx.fillStyle = urgent ? '#ff8080' : p.input.mode === 'eat' ? '#7cff7c' : '#9fe8ff'; ctx.font = '8px "Press Start 2P", monospace';
-      ctx.fillText(p.input.label, Math.round(cx - ctx.measureText(p.input.label).width / 2), Math.round(p.y - 34));
+      ctx.fillText(label, Math.round(cx - ctx.measureText(label).width / 2), Math.round(p.y - 34));
     }
   });
 
@@ -1122,19 +1154,21 @@ function render() {
 
   ctx.restore(); // fin del espacio del mundo: el HUD y overlays se dibujan fijos en pantalla
 
-  // HUD players (top-left)
+  // HUD players (top-left); en pantallas pequeñas (móvil) más compacto
+  const hudSmall = W < 900;
   const hudX = 14, hudY = 12;
   players.forEach((p,i) => {
-    const y = hudY + i * 34;
-    const boxW = 280, boxH = 18;
+    const y = hudY + i * (hudSmall ? 26 : 34);
+    const boxW = hudSmall ? 130 : 280, boxH = hudSmall ? 14 : 18;
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(hudX, y, boxW, boxH);
     ctx.fillStyle = '#7cff7c'; ctx.fillRect(hudX + 2, y + 2, Math.max(0, Math.round((boxW - 4) * (p.hp / p.maxHp))), boxH - 4);
-    ctx.fillStyle = '#fff'; ctx.font = '12px "Press Start 2P", monospace'; ctx.fillText(`${p.name} ${Math.round(p.hp)}/${p.maxHp}`, hudX + boxW + 8, y + boxH - 6);
+    ctx.fillStyle = '#fff'; ctx.font = `${hudSmall ? 8 : 12}px "Press Start 2P", monospace`;
+    ctx.fillText(`${p.name} ${Math.round(p.hp)}/${p.maxHp}`, hudX + boxW + 8, y + boxH - (hudSmall ? 4 : 6));
   });
 
   // CapoCoins (partidas de verdad): saldo total y lo ganado en esta partida, y los objetos activos
   if (!simulationMode) {
-    const cy = hudY + players.length * 34 + 6;
+    const cy = hudY + players.length * (hudSmall ? 26 : 34) + 6;
     drawCoinIcon(ctx, hudX + 9, cy + 7, 8);
     ctx.fillStyle = '#ffd24a'; ctx.font = '12px "Press Start 2P", monospace';
     ctx.fillText(`${getCoins()}`, hudX + 24, cy + 12);
@@ -1144,18 +1178,26 @@ function render() {
   }
 
   // HUD right: round + legend
-  ctx.fillStyle = 'rgba(0,0,0,0.45)'; const panelW = 380, panelH = 140; const px = W - panelW - 18, py = 18;
-  ctx.fillRect(px, py, panelW, panelH);
-  ctx.fillStyle = '#cfe'; ctx.font = '12px "Press Start 2P", monospace';
+  const legend = controlsLegend();
+  const small = W < 900;                          // móvil / ventana estrecha: panel compacto
+  const panelW = small ? Math.min(300, W * 0.42) : 380, panelH = 26 + legend.length * (small ? 16 : 22);
+  const px = W - panelW - 18, py = 18;
+  ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(px, py, panelW, panelH);
+  ctx.fillStyle = '#cfe'; ctx.font = `${small ? 9 : 12}px "Press Start 2P", monospace`;
   ctx.fillText(`Ronda: ${currentRound}/${maxRounds}${simulationMode ? (aiParams ? '   [IA ENTRENADA' : '   [SIMULACIÓN IA') + (startRound > 1 ? ` · desde ${startRound}]` : ']') : ''}`, px + 12, py + 18);
-  ctx.fillText(`${players[0].name} (P1): Flechas - Melee M (press)`, px + 12, py + 40);
-  ctx.fillText(`${players[1].name} (P2): WASD - Disparo F (hold)`, px + 12, py + 62);
-  ctx.fillText('Parry: P1 ↓  P2 S   Dash: P1 Enter  P2 X', px + 12, py + 84);
+  ctx.font = `${small ? 7 : 10}px "Press Start 2P", monospace`;
+  legend.forEach((line, i) => ctx.fillText(line, px + 12, py + (small ? 34 : 40) + i * (small ? 16 : 22)));
 
-  // debug
-  ctx.fillStyle = '#fff'; ctx.font = '10px "Press Start 2P", monospace';
-  ctx.fillText(`Enemigos vivos: ${enemies.filter(e => e.alive).length}`, 12, H - 12);
-  ctx.fillText(`Balas: ${bullets.length} / E-Balas: ${enemyBullets.length}`, 12, H - 26);
+  // enemigos vivos (y balas): abajo a la izquierda; en pantallas pequeñas arriba, para no quedar bajo los botones táctiles
+  ctx.fillStyle = '#fff';
+  if (hudSmall) {
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.fillText(`Enemigos vivos: ${enemies.filter(e => e.alive).length}`, hudX, hudY + players.length * 26 + (simulationMode ? 12 : 42));
+  } else {
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.fillText(`Enemigos vivos: ${enemies.filter(e => e.alive).length}`, 12, H - 12);
+    ctx.fillText(`Balas: ${bullets.length} / E-Balas: ${enemyBullets.length}`, 12, H - 26);
+  }
 
   
     // overlay
@@ -1197,6 +1239,27 @@ function render() {
 }
 
 
+// Leyenda de controles del HUD según quién maneja a cada jugador
+function controlsLegend() {
+  if (simulationMode) return ['Los dos jugadores los maneja la IA'];
+  const names = ['Lanzziano', 'Jhoabxi'];
+  const mine = controlModes.findIndex(m => m === 'solo' || m === 'touch');
+  if (mine >= 0) {
+    const partner = names[1 - mine];
+    if (controlModes[mine] === 'touch') return [`Tú: ${names[mine]} (botones)`, `${partner}: IA`];
+    return [
+      `Tú: ${names[mine]} · Flechas o WASD`,
+      `${mine === 0 ? 'Golpe' : 'Disparo'}: M/F/J · Salto: ↑/W/Espacio`,
+      `Parry: ↓/S · Dash: Enter/X · ${partner}: IA`
+    ];
+  }
+  return [
+    `${names[0]} (P1): Flechas · Golpe M`,
+    `${names[1]} (P2): WASD · Disparo F (mantener)`,
+    'Parry: P1 ↓  P2 S   Dash: P1 Enter  P2 X'
+  ];
+}
+
 // Moneda CapoCoin en pixel art: círculo dorado con borde y una "C"
 function drawCoinIcon(ctx, cx, cy, r) {
   ctx.save();
@@ -1219,12 +1282,18 @@ function update(dt) {
 // startRound solo se usa en simulación; jugando de verdad siempre se empieza en la ronda 1
 // hold: true = empieza congelado hasta releaseHold() (cuenta atrás del menú)
 // boosts: objetos de la TIENDA activos ({ speed, strength, health }); no se aplican en simulación
-export function start({ canvas: suppliedCanvas, onResize, simulation = false, aiParams: params = null, startRound: round = 1, hold = false, boosts: shopBoosts = null } = {}) {
+// controls: ['keys'|'solo'|'touch'|'ai', ...] por jugador (controles.js); touch: entrada táctil (touch.js);
+// partnerAi: parámetros de la IA compañera (null = la original)
+export function start({ canvas: suppliedCanvas, onResize, simulation = false, aiParams: params = null, startRound: round = 1, hold = false, boosts: shopBoosts = null,
+  controls = null, touch = null, partnerAi = null } = {}) {
   if (running || headlessBusy) return;
   running = true; paused = false; gameOver = false; gameOverType = ''; onResizeCallback = onResize || null;
   introHold = !!hold;
   simulationMode = !!simulation;
   boosts = simulationMode ? {} : { ...(shopBoosts || {}) };
+  controlModes = controls || ['keys', 'keys'];
+  touchInput = touch;
+  partnerAiParams = partnerAi;
   aiParams = simulationMode ? params : null;
   startRound = simulationMode ? clampRound(round) : 1;
   canvas = suppliedCanvas instanceof HTMLCanvasElement ? suppliedCanvas : document.querySelector('canvas#gameCanvas');
