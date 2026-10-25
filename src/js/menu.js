@@ -8,6 +8,7 @@ import { initCloud, onCloudChange, isAdmin, currentUser, isRecovering } from './
 import { handleAccountAction, refreshAccount } from './cuenta.js';
 import { getCoins, getActiveBoosts } from './tienda.js';
 import { handleShopAction, refreshShop } from './tiendaUI.js';
+import { refreshRanks, handleRanksAction } from './ranking.js';
 import { getControlPrefs, setControlPref, controlModes } from './controles.js';
 import { createTouchControls, removeTouchControls } from './touch.js';
 import { initMusic, playSong, setBattleState, sfx, jingle, setDucked, setVolume, getVolume, setMusicEnabled, isMusicEnabled } from './music.js';
@@ -22,6 +23,7 @@ const Screens = {
   SHOP: 'screen-tienda',
   SETTINGS: 'screen-settings',
   CREDITS: 'screen-credits',
+  RANKS: 'screen-ranks',
   GAME: 'screen-game'
 };
 
@@ -116,6 +118,8 @@ const app = {
   refreshCloudUI(){
     const admin = isAdmin();
     document.querySelectorAll('.admin-only').forEach(el => { el.hidden = !admin; });
+    // sin SIMULACIONES, Ajustes ocupa la última fila entera del menú
+    document.querySelector('.main-menu')?.classList.toggle('has-admin', admin);
     const user = currentUser();
     const acctBtn = document.querySelector('.acct-btn');
     if (acctBtn) acctBtn.textContent = user ? 'MI CUENTA' : 'CUENTA';
@@ -237,6 +241,14 @@ const app = {
         break;
       case 'kills':
         this.showKills();
+        break;
+      case 'ranks':
+        this.showScreen(Screens.RANKS);
+        refreshRanks(document.getElementById(Screens.RANKS));
+        break;
+      case 'rank-tab':
+      case 'rank-reload':
+        handleRanksAction(action, btn, document.getElementById(Screens.RANKS));
         break;
       case 'predict':
         if (!isAdmin()) break;
