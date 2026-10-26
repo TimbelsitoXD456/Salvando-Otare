@@ -94,10 +94,15 @@ function makePlayer(name, x, y, color, controls) {
   };
 }
 
+// Dificultad por ronda
+const ENEMY_HP_PER_ROUND = 9;
+const ENEMY_DMG_PER_ROUND = 0.02; // fracción de daño extra por ronda (0.03 = +3 %)
+
 // helper to create enemies, with optional overrides (displayName, colorOverride, isMinion)
 function makeEnemy(kind, x, y, round = 1, opts = {}) {
   const tpl = ENEMY_TYPES[kind] || ENEMY_TYPES.melle;
-  const hp = Math.round((tpl.baseHp || 30) + Math.max(0, round - 1) * 6 + Math.random() * 12);
+  // cada ronda los enemigos tienen más vida (ENEMY_HP_PER_ROUND) y pegan un poco más fuerte (ENEMY_DMG_PER_ROUND)
+  const hp = Math.round((tpl.baseHp || 30) + Math.max(0, round - 1) * (opts.bossMinion ? 6 : ENEMY_HP_PER_ROUND) + Math.random() * 12);   // (los esbirros del jefe, como antes)
   // (la velocidad deja de subir en la ronda 30: en supervivencia serían imposibles de esquivar)
   const speed = (tpl.baseSpeed || 60) + Math.round((Math.min(round, 30) - 1) * 4);
   const display = opts.displayName || tpl.display;
@@ -127,6 +132,8 @@ function makeEnemy(kind, x, y, round = 1, opts = {}) {
     speed,
     attackRange: tpl.attackRange || 50,
     attackDamage: tpl.attackDamage || 10,
+    // daño extra por ronda (deja de subir en la 30); el jefe y sus esbirros no: su dificultad va aparte (BOSS_RAGE)
+    dmgMul: kind === 'boss' || opts.bossMinion ? 1 : 1 + (Math.min(round, 30) - 1) * ENEMY_DMG_PER_ROUND,
     shootTimer: getInitialTimer(),
     tpl,
     isMinion: !!opts.isMinion,
@@ -482,7 +489,7 @@ function updateEnemies(dt) {
         if (bestDist > e.attackRange - 6) e.targetVx = chaseDir(e, target) * e.speed * 1.3; // el más rápido: persigue a fondo
         else {
           if ((e.attackCooldown || 0) <= 0) {
-            if (!target.parryInvul) { const hpBefore = target.hp; target.hp = Math.max(0, target.hp - ENEMY_TYPES.melle.attackDamage * armorFactor()); addDamage(players.indexOf(target), 'melle', hpBefore - target.hp); target.hitFlash = 0.12; target.regenTimer = target.regenDelay; }
+            if (!target.parryInvul) { const hpBefore = target.hp; target.hp = Math.max(0, target.hp - ENEMY_TYPES.melle.attackDamage * e.dmgMul * armorFactor()); addDamage(players.indexOf(target), 'melle', hpBefore - target.hp); target.hitFlash = 0.12; target.regenTimer = target.regenDelay; }
             else { e.hp -= 8; e.flash = 0.12; e.vx = -dir * 90; e.lastHitBy = players.indexOf(target); if (e.hp <= 0) killEnemy(e); }
             e.attackCooldown = 0.9;
           }
@@ -500,7 +507,7 @@ function updateEnemies(dt) {
           const len = Math.hypot(dx, dy) || 1;
           const vx = (dx / len) * (ENEMY_TYPES.shotter.bulletSpeed || 240);
           const vy = (dy / len) * (ENEMY_TYPES.shotter.bulletSpeed || 240);
-          enemyBullets.push({ x: sx, y: sy, w: 8, h: 8, vx, vy, life: 4, value: ENEMY_TYPES.shotter.attackDamage || 10, kind: 'enemyDamage', targetKind: 'player', ownerId: e.id });
+          enemyBullets.push({ x: sx, y: sy, w: 8, h: 8, vx, vy, life: 4, value: (ENEMY_TYPES.shotter.attackDamage || 10) * e.dmgMul, kind: 'enemyDamage', targetKind: 'player', ownerId: e.id });
           e.shootTimer = shootCooldown(ENEMY_TYPES.shotter.shootCd || 0.67);
         }
       }
@@ -514,7 +521,7 @@ function updateEnemies(dt) {
           const len = Math.hypot(dx, dy) || 1;
           const vx = (dx / len) * (ENEMY_TYPES.fuerte.bulletSpeed || 260);
           const vy = (dy / len) * (ENEMY_TYPES.fuerte.bulletSpeed || 260);
-          enemyBullets.push({ x: sx, y: sy, w: 10, h: 10, vx, vy, life: 4, value: ENEMY_TYPES.fuerte.attackDamage || 20, kind: 'enemyDamage', targetKind: 'player', ownerId: e.id, style: 'portal' }); // bola de energía verde (solo dibujo)
+          enemyBullets.push({ x: sx, y: sy, w: 10, h: 10, vx, vy, life: 4, value: (ENEMY_TYPES.fuerte.attackDamage || 20) * e.dmgMul, kind: 'enemyDamage', targetKind: 'player', ownerId: e.id, style: 'portal' }); // bola de energía verde (solo dibujo)
           e.shootTimer = shootCooldown(ENEMY_TYPES.fuerte.shootCd || 0.77);
         }
       }
@@ -559,7 +566,7 @@ function updateEnemies(dt) {
           const len = Math.hypot(dx, dy) || 1;
           const vx = (dx / len) * (ENEMY_TYPES.oscar.bulletSpeed || 240);
           const vy = (dy / len) * (ENEMY_TYPES.oscar.bulletSpeed || 240);
-          enemyBullets.push({ x: sx, y: sy, w: 8, h: 8, vx, vy, life: 4, value: ENEMY_TYPES.oscar.bulletDmg || 10, kind: 'enemyDamage', targetKind: 'player', ownerId: e.id });
+          enemyBullets.push({ x: sx, y: sy, w: 8, h: 8, vx, vy, life: 4, value: (ENEMY_TYPES.oscar.bulletDmg || 10) * e.dmgMul, kind: 'enemyDamage', targetKind: 'player', ownerId: e.id });
         }
         e.shootTimer = shootCooldown(ENEMY_TYPES.oscar.shootCd || 0.56);
       }
@@ -574,7 +581,7 @@ function updateEnemies(dt) {
           const len = Math.hypot(dx, dy) || 1;
           const vx = (dx / len) * (ENEMY_TYPES.juan.bulletSpeed || 260);
           const vy = (dy / len) * (ENEMY_TYPES.juan.bulletSpeed || 260);
-          enemyBullets.push({ x: sx, y: sy, w: 10, h: 10, vx, vy, life: 4, value: ENEMY_TYPES.juan.bulletDmg || 20, kind: 'enemyDamage', targetKind: 'player', ownerId: e.id });
+          enemyBullets.push({ x: sx, y: sy, w: 10, h: 10, vx, vy, life: 4, value: (ENEMY_TYPES.juan.bulletDmg || 20) * e.dmgMul, kind: 'enemyDamage', targetKind: 'player', ownerId: e.id });
         }
         e.shootTimer = shootCooldown(ENEMY_TYPES.juan.shootCd || 1.0);
       }
@@ -597,7 +604,7 @@ function updateEnemies(dt) {
           const t = types[Math.floor(Math.random() * types.length)];
           const sx = Math.min(world.mapWidth - 60, Math.max(60, e.x + (Math.random() * 200 - 100)));
           const jitter = Math.random() * 6 - 3;
-          const min = makeEnemy(t, sx, e.y + jitter, currentRound, { displayName: `Min-${t}`, isMinion: true });
+          const min = makeEnemy(t, sx, e.y + jitter, currentRound, { displayName: `Min-${t}`, isMinion: true, bossMinion: true });
           min.y = e.y + e.h - min.h + jitter; // a los pies del jefe (antes salían flotando)
           min.magicSpawn = true;              // aparece con un "puf" de magia verde (solo dibujo)
           enemies.push(min);
@@ -613,7 +620,7 @@ function updateEnemies(dt) {
           const base = Math.atan2((t.y + t.h/2) - sy, (t.x + t.w/2) - sx);
           for (const da of spread) {
             const a = base + da;
-            enemyBullets.push({ x: sx, y: sy, w: 12, h: 12, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: 4, value: ENEMY_TYPES.boss.attackDamage || 40, kind: 'enemyDamage', targetKind: 'player', ownerId: e.id, style: 'doom' }); // bola de magia verde (solo dibujo)
+            enemyBullets.push({ x: sx, y: sy, w: 12, h: 12, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: 4, value: (ENEMY_TYPES.boss.attackDamage || 40) * e.dmgMul, kind: 'enemyDamage', targetKind: 'player', ownerId: e.id, style: 'doom' }); // bola de magia verde (solo dibujo)
           }
         });
         e.attackCooldown = rage ? 1.5 + Math.random() * 1.4 : 1.2 + Math.random() * 1.6;
