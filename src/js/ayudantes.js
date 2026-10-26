@@ -94,6 +94,8 @@ export function drawBonkChanti(ctx, h, time) {
   ctx.font = '8px "Press Start 2P", monospace';
   ctx.fillStyle = '#b8ffb8';
   const label = 'BonkChanti';
+  ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(12,10,24,0.9)';
+  ctx.strokeText(label, Math.round(h.x - ctx.measureText(label).width / 2), Math.round(h.y + bob - 50));
   ctx.fillText(label, Math.round(h.x - ctx.measureText(label).width / 2), Math.round(h.y + bob - 50));
 }
 

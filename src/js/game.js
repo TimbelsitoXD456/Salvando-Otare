@@ -8,6 +8,7 @@ import { FOOD_TYPES, FOOD_LIFETIME, FOOD_SPAWN_FIRST, FOOD_SPAWN_INTERVAL, FOOD_
 import { drawPlayer } from './playerSprites.js';
 import { drawEnemy, drawPill, drawEnergyBall, HAS_SPRITE } from './enemySprites.js';
 import { drawBonkChanti, drawHeartOrb } from './ayudantes.js';
+import { drawBackdrop, drawGround, drawPlatform } from './mapa.js';
 
 let canvas, ctx, loopHandle, resizeObserver;
 let players = [];
@@ -352,6 +353,11 @@ function announce(type, detail) {
   if (headlessView || typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent(type, { detail }));
 }
+// Efectos de sonido (music.js vía menu.js): solo en partidas que se ven
+function playSfx(name) {
+  if (headlessView || typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('sfx', { detail: name }));
+}
 function announceRound() {
   announce('battleState', { round: currentRound, boss: isBossRound(currentRound), tigre: enemies.some(e => e.kind === 'tigre') });
 }
@@ -489,8 +495,8 @@ function updateEnemies(dt) {
         if (bestDist > e.attackRange - 6) e.targetVx = chaseDir(e, target) * e.speed * 1.3; // el más rápido: persigue a fondo
         else {
           if ((e.attackCooldown || 0) <= 0) {
-            if (!target.parryInvul) { const hpBefore = target.hp; target.hp = Math.max(0, target.hp - ENEMY_TYPES.melle.attackDamage * e.dmgMul * armorFactor()); addDamage(players.indexOf(target), 'melle', hpBefore - target.hp); target.hitFlash = 0.12; target.regenTimer = target.regenDelay; }
-            else { e.hp -= 8; e.flash = 0.12; e.vx = -dir * 90; e.lastHitBy = players.indexOf(target); if (e.hp <= 0) killEnemy(e); }
+            if (!target.parryInvul) { const hpBefore = target.hp; target.hp = Math.max(0, target.hp - ENEMY_TYPES.melle.attackDamage * e.dmgMul * armorFactor()); addDamage(players.indexOf(target), 'melle', hpBefore - target.hp); target.hitFlash = 0.12; playSfx('hurt'); target.regenTimer = target.regenDelay; }
+            else { playSfx('block'); e.hp -= 8; e.flash = 0.12; e.vx = -dir * 90; e.lastHitBy = players.indexOf(target); if (e.hp <= 0) killEnemy(e); }
             e.attackCooldown = 0.9;
           }
         }
@@ -507,6 +513,7 @@ function updateEnemies(dt) {
           const len = Math.hypot(dx, dy) || 1;
           const vx = (dx / len) * (ENEMY_TYPES.shotter.bulletSpeed || 240);
           const vy = (dy / len) * (ENEMY_TYPES.shotter.bulletSpeed || 240);
+          playSfx('enemyShoot');
           enemyBullets.push({ x: sx, y: sy, w: 8, h: 8, vx, vy, life: 4, value: (ENEMY_TYPES.shotter.attackDamage || 10) * e.dmgMul, kind: 'enemyDamage', targetKind: 'player', ownerId: e.id });
           e.shootTimer = shootCooldown(ENEMY_TYPES.shotter.shootCd || 0.67);
         }
@@ -521,6 +528,7 @@ function updateEnemies(dt) {
           const len = Math.hypot(dx, dy) || 1;
           const vx = (dx / len) * (ENEMY_TYPES.fuerte.bulletSpeed || 260);
           const vy = (dy / len) * (ENEMY_TYPES.fuerte.bulletSpeed || 260);
+          playSfx('enemyShoot');
           enemyBullets.push({ x: sx, y: sy, w: 10, h: 10, vx, vy, life: 4, value: (ENEMY_TYPES.fuerte.attackDamage || 20) * e.dmgMul, kind: 'enemyDamage', targetKind: 'player', ownerId: e.id, style: 'portal' }); // bola de energía verde (solo dibujo)
           e.shootTimer = shootCooldown(ENEMY_TYPES.fuerte.shootCd || 0.77);
         }
@@ -553,6 +561,7 @@ function updateEnemies(dt) {
       // cada Tigre invoca UNA sola horda en toda su vida (antes era cada 10 s y las hordas se acumulaban)
       if (!e.summonedHorde && e.shootTimer <= 0) {
         spawnTigerMinions(e);
+        playSfx('roar');
         e.summonedHorde = true;
         e.flash = 0.25;
       }
@@ -566,6 +575,7 @@ function updateEnemies(dt) {
           const len = Math.hypot(dx, dy) || 1;
           const vx = (dx / len) * (ENEMY_TYPES.oscar.bulletSpeed || 240);
           const vy = (dy / len) * (ENEMY_TYPES.oscar.bulletSpeed || 240);
+          playSfx('enemyShoot');
           enemyBullets.push({ x: sx, y: sy, w: 8, h: 8, vx, vy, life: 4, value: (ENEMY_TYPES.oscar.bulletDmg || 10) * e.dmgMul, kind: 'enemyDamage', targetKind: 'player', ownerId: e.id });
         }
         e.shootTimer = shootCooldown(ENEMY_TYPES.oscar.shootCd || 0.56);
@@ -581,6 +591,7 @@ function updateEnemies(dt) {
           const len = Math.hypot(dx, dy) || 1;
           const vx = (dx / len) * (ENEMY_TYPES.juan.bulletSpeed || 260);
           const vy = (dy / len) * (ENEMY_TYPES.juan.bulletSpeed || 260);
+          playSfx('enemyShoot');
           enemyBullets.push({ x: sx, y: sy, w: 10, h: 10, vx, vy, life: 4, value: (ENEMY_TYPES.juan.bulletDmg || 20) * e.dmgMul, kind: 'enemyDamage', targetKind: 'player', ownerId: e.id });
         }
         e.shootTimer = shootCooldown(ENEMY_TYPES.juan.shootCd || 1.0);
@@ -591,6 +602,7 @@ function updateEnemies(dt) {
       // rápidas y persigue más deprisa
       if (!e.enraged && e.hp <= e.maxHp * BOSS_RAGE.at) {
         e.enraged = true;
+        playSfx('rage');
         e.rageT = gameTime;
         floatTexts.push({ x: e.x - 10, y: e.y - 40, text: '¡FURIA!', color: '#ff4040', life: 1.6 });
         announce('battleState', { round: currentRound, boss: true, rage: true, tigre: false });
@@ -607,12 +619,14 @@ function updateEnemies(dt) {
           const min = makeEnemy(t, sx, e.y + jitter, currentRound, { displayName: `Min-${t}`, isMinion: true, bossMinion: true });
           min.y = e.y + e.h - min.h + jitter; // a los pies del jefe (antes salían flotando)
           min.magicSpawn = true;              // aparece con un "puf" de magia verde (solo dibujo)
+          if (m === 0) playSfx('summon');
           enemies.push(min);
         }
         e.shootTimer = rage ? BOSS_RAGE.summonCd : (ENEMY_TYPES.boss.summonCd || 8);
       }
       if ((e.attackCooldown || 0) <= 0 && Math.random() < 5.4 * dt) {
         const speed = rage ? BOSS_RAGE.orbSpeed : 160;
+        playSfx('bossShoot');
         const spread = rage ? [-BOSS_RAGE.spread, 0, BOSS_RAGE.spread] : [0];   // en furia, abanico de 3
         players.forEach(t => {
           if (!t.alive) return;
@@ -645,6 +659,7 @@ function updateEnemies(dt) {
 function killEnemy(e) {
   if (!e.alive) return;
   e.alive = false;
+  playSfx('enemyDie');
   const killer = players[e.lastHitBy];
   if (!killer) return;
   if (simulationMode) { simStats.kills[e.lastHitBy]++; return; } // las kills de la IA no cuentan ni dan monedas
@@ -653,6 +668,7 @@ function killEnemy(e) {
   const coins = coinValue(e.kind) * (boosts.coinsx2 ? 2 : 1);   // X2 MONEDAS de la tienda
   earnCoins(coins);
   runCoins += coins;
+  playSfx(coins >= 50 ? 'bigCoin' : 'coin');
   floatTexts.push({ x: e.x + e.w / 2 - 8, y: e.y - 14, text: `+${coins}`, color: '#ffd24a', life: 1.0 });
 }
 
@@ -660,6 +676,7 @@ function handlePlayerDeath(deadIdx) {
   const dead = players[deadIdx];
   if (!dead) return;
   dead.deadPose = true;
+  playSfx('playerDown');
   dead.alive = false;
   dead.vx = 0;
   dead.vy = 0;
@@ -728,6 +745,7 @@ function updateFoods(dt) {
       p.hp += healed;
       simStats.healed[pi] += healed;
       simStats.food.eaten++;
+      playSfx('eat');
       floatTexts.push({ x: f.x, y: f.y, text: `+${Math.round(healed)}`, color: '#7cff7c', life: 1.2 });
       foods.splice(i, 1);
       break;
@@ -788,6 +806,7 @@ function updateHelper(dt, W) {
         const pi = players.indexOf(t);
         if (pi >= 0) simStats.healed[pi] += healed;
         floatTexts.push({ x: t.x + t.w / 2 - 10, y: t.y - 10, text: `+${Math.round(healed)}`, color: '#7cff7c', life: 1.0 });
+        playSfx('heal');
       }
       heartOrbs.splice(i, 1);
     }
@@ -815,6 +834,7 @@ function physicsUpdate(dt) {
       if (rectsOverlap(b, e)) {
         e.hp -= b.damage;
         e.lastHitBy = b.owner;
+        playSfx('hit');
         e.flash = 0.12;
         bullets.splice(i, 1);
         break;
@@ -843,6 +863,7 @@ function physicsUpdate(dt) {
             p.hp = Math.max(0, p.hp - eb.value * armorFactor());
             addDamage(pi, 'bala', hpBefore - p.hp);
             p.hitFlash = 0.12;
+            playSfx('hurt');
             p.regenTimer = p.regenDelay;
             if (p.hp <= 0 && p.alive) {
               // handle death and buffs
@@ -955,7 +976,7 @@ function physicsUpdate(dt) {
     // jump buffering
     if (inp.wasPressed('jump')) p.jumpBufferTimer = p.jumpBufferTime;
     if (p.grounded) p.coyoteTimer = p.coyoteTime;
-    if (p.jumpBufferTimer > 0 && p.coyoteTimer > 0) { p.vy = -p.jumpPower; p.grounded = false; p.coyoteTimer = 0; p.jumpBufferTimer = 0; }
+    if (p.jumpBufferTimer > 0 && p.coyoteTimer > 0) { playSfx('jump'); p.vy = -p.jumpPower; p.grounded = false; p.coyoteTimer = 0; p.jumpBufferTimer = 0; }
 
     // dash/parry
     // duración activa con dt (se congela al pausar, a diferencia de setTimeout)
@@ -968,10 +989,12 @@ function physicsUpdate(dt) {
       if (p.parryActiveTimer <= 0) { p.parrying = false; p.parryInvul = false; }
     }
     if (inp.wasPressed('dash') && p.dashTimer <= 0 && !p.dashing) {
+      playSfx('dash');
       p.dashing = true; p.dashTimer = p.dashCooldown; p.dashInvul = true; p.dashActiveTimer = p.dashDuration;
       p.vx = p.facing * p.dashSpeed; p.vy = Math.min(p.vy || 0, 0);
     }
     if (inp.wasPressed('parry') && p.parryTimer <= 0 && !p.parrying) {
+      playSfx('parry');
       p.parrying = true; p.parryInvul = true; p.parryTimer = p.parryCooldown; p.parryActiveTimer = p.parryDuration;
     }
 
@@ -979,6 +1002,7 @@ function physicsUpdate(dt) {
     // Lanzziano: melee keyed - damage per press (no cooldown enforcement)
     if (inp.wasPressed('melee')) {
       p.meleeTimer = MELEE.duration;
+      playSfx('punch');
       // apply immediate hit once per press (we ensure wasPressed gives edge)
       const hb = { x: p.facing > 0 ? p.x + p.w : p.x - MELEE.range, y: p.y + (p.h - MELEE.width)/2, w: MELEE.range, h: MELEE.width };
       for (const e of enemies) {
@@ -996,6 +1020,7 @@ function physicsUpdate(dt) {
     if (inp.isDown('shoot') && p.shootingCooldown <= 0) {
       const bx = p.x + (p.facing > 0 ? p.w + 6 : -6);
       const by = p.y + Math.round(p.h * 0.45);
+      playSfx('shoot');
       spawnPlayerBullet(bx, by, JHOABXI_BULLET_SPEED, (p.bulletDamage || JHOABXI_BULLET_DAMAGE), pi);
       p.shootingCooldown = JHOABXI_SHOOT_CD;
     }
@@ -1017,6 +1042,7 @@ function physicsUpdate(dt) {
           p.hp = Math.max(0, p.hp - plat.damage);
           addDamage(pi, 'pinchos', hpBefore - p.hp);
           p.hitFlash = 0.12;
+          playSfx('hurt');
           p.regenTimer = p.regenDelay;
           // Bounce up
           p.vy = -300;
@@ -1128,42 +1154,15 @@ function render() {
 
   // la cámara se actualiza en physicsUpdate (updateCamera)
 
+  // escenario (mapa.js): cielo, montañas, la iglesia de Otare y árboles, con paralaje
+  drawBackdrop(ctx, { W, H, cameraX: world.cameraX, groundY: H - world.groundOffset, mapW: world.mapWidth, time: gameTime });
+
   // Save canvas state para transformación
   ctx.save();
   ctx.translate(-world.cameraX, 0);
 
-  // background (ajustado al mapa)
-  const bg = ctx.createLinearGradient(world.cameraX, 0, world.cameraX, H);
-  bg.addColorStop(0, '#062b16'); bg.addColorStop(1, '#0a2b14');
-  ctx.fillStyle = bg; ctx.fillRect(world.cameraX, 0, W + world.mapWidth, H);
-
-  // Renderizar plataformas
-  platforms.forEach(p => {
-    if (p.type === 'spike') {
-      // Dibuja pinchos
-      ctx.fillStyle = p.color;
-      for (let i = 0; i < Math.ceil(p.w / 16); i++) {
-        ctx.beginPath();
-        ctx.moveTo(Math.round(p.x + i * 16), Math.round(p.y + p.h));
-        ctx.lineTo(Math.round(p.x + i * 16 + 8), Math.round(p.y));
-        ctx.lineTo(Math.round(p.x + i * 16 + 16), Math.round(p.y + p.h));
-        ctx.fill();
-      }
-    } else {
-      ctx.fillStyle = p.color;
-      ctx.fillRect(Math.round(p.x), Math.round(p.y), p.w, p.h);
-      
-      // Borde para plataformas hielo
-      if (p.type === 'ice') {
-        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(Math.round(p.x), Math.round(p.y), p.w, p.h);
-      }
-    }
-  });
-
-  // ground
-  ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(0, H - world.groundOffset, world.mapWidth, world.groundOffset);
+  // carretera de tierra (el suelo) y plataformas: tablones, tablones mojados (hielo) y zarzales (pinchos)
+  platforms.forEach((p, i) => (i === 0 ? drawGround(ctx, p) : drawPlatform(ctx, p, gameTime)));
 
   // comida (brilla, flota y parpadea en rojo antes de desaparecer)
   foods.forEach(f => drawFood(ctx, f, gameTime));
@@ -1200,7 +1199,7 @@ function render() {
     ctx.fillStyle = '#ff6a6a'; ctx.fillRect(e.x, e.y - 8, Math.max(0, Math.round(e.w * (e.hp / e.maxHp))), 6);
 
     ctx.fillStyle = '#fff'; ctx.font = '10px "Press Start 2P", monospace';
-    ctx.fillText(e.display, Math.round(e.x), Math.round(e.y - 12));
+    outlinedText(ctx, e.display, Math.round(e.x), Math.round(e.y - 12));
 
     // marca de tirador con turno: punto de mira rojo sobre el nombre
     if (e.canShoot) {
@@ -1257,13 +1256,13 @@ function render() {
     ctx.font = '9px "Press Start 2P", monospace';
     ctx.fillStyle = p.alive ? '#fff' : 'rgba(255,255,255,0.5)';
     const nameY = p.alive ? p.y - 18 : p.y + p.h - 34;
-    ctx.fillText(p.name, Math.round(cx - ctx.measureText(p.name).width / 2), Math.round(nameY));
+    outlinedText(ctx, p.name, Math.round(cx - ctx.measureText(p.name).width / 2), Math.round(nameY));
     // jugador manejado por la IA (simulación o compañero): qué está decidiendo
     if (p.alive && p.input.think && p.input.label) {
       const urgent = p.input.mode === 'retreat' || p.input.mode === 'highGround';
       const label = simulationMode ? p.input.label : `IA · ${p.input.label}`;
       ctx.fillStyle = urgent ? '#ff8080' : p.input.mode === 'eat' ? '#7cff7c' : '#9fe8ff'; ctx.font = '8px "Press Start 2P", monospace';
-      ctx.fillText(label, Math.round(cx - ctx.measureText(label).width / 2), Math.round(p.y - 34));
+      outlinedText(ctx, label, Math.round(cx - ctx.measureText(label).width / 2), Math.round(p.y - 34));
     }
   });
 
@@ -1278,13 +1277,19 @@ function render() {
   // HUD players (top-left); en pantallas pequeñas (móvil) más compacto
   const hudSmall = W < 900;
   const hudX = 14, hudY = 12;
+  // panel oscuro detrás (el cielo del escenario es claro)
+  {
+    const rows = players.length * (hudSmall ? 26 : 34) + (simulationMode ? 0 : 40) + (!simulationMode && Object.values(boosts).some(Boolean) ? 14 : 0);
+    ctx.fillStyle = 'rgba(0,0,0,0.42)';
+    ctx.fillRect(hudX - 8, hudY - 6, hudSmall ? 290 : 500, rows + 4);
+  }
   players.forEach((p,i) => {
     const y = hudY + i * (hudSmall ? 26 : 34);
     const boxW = hudSmall ? 130 : 280, boxH = hudSmall ? 14 : 18;
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(hudX, y, boxW, boxH);
     ctx.fillStyle = '#7cff7c'; ctx.fillRect(hudX + 2, y + 2, Math.max(0, Math.round((boxW - 4) * (p.hp / p.maxHp))), boxH - 4);
     ctx.fillStyle = '#fff'; ctx.font = `${hudSmall ? 8 : 12}px "Press Start 2P", monospace`;
-    ctx.fillText(`${p.name} ${Math.round(p.hp)}/${p.maxHp}`, hudX + boxW + 8, y + boxH - (hudSmall ? 4 : 6));
+    outlinedText(ctx, `${p.name} ${Math.round(p.hp)}/${p.maxHp}`, hudX + boxW + 8, y + boxH - (hudSmall ? 4 : 6));
   });
 
   // CapoCoins (partidas de verdad): saldo total y lo ganado en esta partida, y los objetos activos
@@ -1292,10 +1297,10 @@ function render() {
     const cy = hudY + players.length * (hudSmall ? 26 : 34) + 6;
     drawCoinIcon(ctx, hudX + 9, cy + 7, 8);
     ctx.fillStyle = '#ffd24a'; ctx.font = '12px "Press Start 2P", monospace';
-    ctx.fillText(`${getCoins()}`, hudX + 24, cy + 12);
-    if (runCoins > 0) { ctx.fillStyle = '#fff3b0'; ctx.font = '9px "Press Start 2P", monospace'; ctx.fillText(`+${runCoins} esta partida`, hudX + 110, cy + 11); }
+    outlinedText(ctx, `${getCoins()}`, hudX + 24, cy + 12);
+    if (runCoins > 0) { ctx.fillStyle = '#fff3b0'; ctx.font = '9px "Press Start 2P", monospace'; outlinedText(ctx, `+${runCoins} esta partida`, hudX + 110, cy + 11); }
     const active = [['speed', 'x2 VEL'], ['strength', 'x2 FUE'], ['health', 'x2 VIDA'], ['armor', 'ARMADURA'], ['coinsx2', 'x2 MONEDAS'], ['bonkchanti', 'BONKCHANTI']].filter(([k]) => boosts[k]).map(([, t]) => t);
-    if (active.length) { ctx.fillStyle = '#ff6bec'; ctx.font = '8px "Press Start 2P", monospace'; ctx.fillText(active.join('  '), hudX, cy + 30); }
+    if (active.length) { ctx.fillStyle = '#ff6bec'; ctx.font = '8px "Press Start 2P", monospace'; outlinedText(ctx, active.join('  '), hudX, cy + 30); }
   }
 
   // HUD right: round + legend
@@ -1315,11 +1320,11 @@ function render() {
     ctx.font = '8px "Press Start 2P", monospace';
     // (más abajo si hay objetos activos: su línea va justo debajo de las monedas)
     const boostLine = !simulationMode && Object.values(boosts).some(Boolean) ? 14 : 0;
-    ctx.fillText(`Enemigos vivos: ${enemies.filter(e => e.alive).length}`, hudX, hudY + players.length * 26 + (simulationMode ? 12 : 42) + boostLine);
+    outlinedText(ctx, `Enemigos vivos: ${enemies.filter(e => e.alive).length}`, hudX, hudY + players.length * 26 + (simulationMode ? 12 : 42) + boostLine);
   } else {
     ctx.font = '10px "Press Start 2P", monospace';
-    ctx.fillText(`Enemigos vivos: ${enemies.filter(e => e.alive).length}`, 12, H - 12);
-    ctx.fillText(`Balas: ${bullets.length} / E-Balas: ${enemyBullets.length}`, 12, H - 26);
+    outlinedText(ctx, `Enemigos vivos: ${enemies.filter(e => e.alive).length}`, 12, H - 12);
+    outlinedText(ctx, `Balas: ${bullets.length} / E-Balas: ${enemyBullets.length}`, 12, H - 26);
   }
 
   
@@ -1382,6 +1387,15 @@ function controlsLegend() {
     `${names[1]} (P2): WASD · Disparo F (mantener)`,
     'Parry: P1 ↓  P2 S   Dash: P1 Enter  P2 X'
   ];
+}
+
+// Texto con contorno oscuro: se lee igual sobre el cielo claro que sobre la tierra
+function outlinedText(ctx, text, x, y) {
+  ctx.save();
+  ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(12,10,24,0.9)';
+  ctx.strokeText(text, x, y);
+  ctx.restore();
+  ctx.fillText(text, x, y);
 }
 
 // Moneda CapoCoin en pixel art: círculo dorado con borde y una "C"

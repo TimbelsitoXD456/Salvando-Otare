@@ -5,6 +5,7 @@
 //   battle  "Duelo de Caballeros"  fanfarria medieval con ritmo de galope; se intensifica (niveles 0-2)
 //   boss    "El Tigre Oscuro"      tema del jefe final
 //   + sonidos de la cuenta atrás (3, 2, 1, PELIEN) y melodías de victoria / derrota.
+//   + EFECTOS DE SONIDO de la partida (golpes, disparos, saltos, parry...), también sintetizados: SFX más abajo.
 //
 // Notación de las pistas: un token por semicorchea (16 por compás): 'E4' nota, '.' silencio,
 // '-' alarga la nota anterior, 'E4+G4+B4' acorde. Las pistas se repiten cada una con su propia longitud.
@@ -121,9 +122,10 @@ const JINGLES = {
 };
 
 // ---------- motor de audio ----------
-let ctx = null, master = null, musicBus = null, noiseBuf = null, analyser = null;
+let ctx = null, master = null, musicBus = null, sfxBus = null, noiseBuf = null, analyser = null;
 let volume = loadNumber('salvandoOtare.volume', 0.6);
 let enabled = loadNumber('salvandoOtare.musicOn', 1) === 1;
+let sfxEnabled = loadNumber('salvandoOtare.sfxOn', 1) === 1;   // efectos de sonido, aparte de la música
 let ducked = false;
 let wanted = null;          // canción que debería sonar ('menu', 'battle', 'boss' o null)
 let current = null;         // { name, song, gain, step, nextTime, level }
@@ -144,9 +146,11 @@ function ensureContext() {
   comp.threshold.value = -14; comp.ratio.value = 4;
   master = ctx.createGain();
   musicBus = ctx.createGain();
+  sfxBus = ctx.createGain();
   analyser = ctx.createAnalyser();                    // para musicStatus(): ¿está sonando algo?
   analyser.fftSize = 1024;
   musicBus.connect(master);
+  sfxBus.connect(master);
   master.connect(analyser);
   analyser.connect(comp);
   comp.connect(ctx.destination);
@@ -158,10 +162,12 @@ function ensureContext() {
   return ctx;
 }
 
+// el volumen general manda sobre los dos canales; la música y los efectos se apagan por separado
 function applyVolume() {
   if (!master) return;
-  const target = enabled ? volume * (ducked ? 0.35 : 1) : 0;
-  master.gain.setTargetAtTime(target, ctx.currentTime, 0.08);
+  master.gain.setTargetAtTime(volume, ctx.currentTime, 0.08);
+  musicBus.gain.setTargetAtTime(enabled ? (ducked ? 0.35 : 1) : 0, ctx.currentTime, 0.08);
+  sfxBus.gain.setTargetAtTime(sfxEnabled ? 0.9 : 0, ctx.currentTime, 0.05);
 }
 
 // ---------- instrumentos ----------
@@ -220,6 +226,39 @@ function drum(kind, d, t) {
   if (kind === 'kick') tone(d, 'sine', 150, t, 0.14, 0.5, { glideTo: 42, attack: 0.002, release: 0.1 });
   else if (kind === 'snare') { noise(d, t, 0.13, 0.22, 'bandpass', 1900); tone(d, 'triangle', 190, t, 0.07, 0.12); }
   else noise(d, t, 0.035, 0.06, 'highpass', 7000);
+}
+
+// ---------- efectos de sonido de la partida ----------
+// Cada uno es una receta corta de osciladores y ruido. gap: tiempo mínimo entre dos iguales (para que
+// una ráfaga de disparos o diez enemigos muriendo a la vez no saturen).
+const SFX = {
+  punch:   { gap: 0.05, play: (d, t) => { noise(d, t, 0.06, 0.16, 'bandpass', 900); tone(d, 'sine', 140, t, 0.08, 0.22, { glideTo: 60 }); } },
+  hit:     { gap: 0.04, play: (d, t) => { noise(d, t, 0.05, 0.12, 'bandpass', 1500); tone(d, 'square', 180, t, 0.05, 0.05, { glideTo: 90, lowpass: 1200 }); } },
+  shoot:   { gap: 0.07, play: (d, t) => { noise(d, t, 0.07, 0.16, 'highpass', 1800); tone(d, 'square', 260, t, 0.05, 0.05, { glideTo: 90, lowpass: 2000 }); } },
+  jump:    { gap: 0.08, play: (d, t) => tone(d, 'square', 280, t, 0.12, 0.05, { glideTo: 620, lowpass: 3000 }) },
+  dash:    { gap: 0.1,  play: (d, t) => { noise(d, t, 0.2, 0.13, 'bandpass', 700); noise(d, t + 0.05, 0.15, 0.08, 'bandpass', 1600); } },
+  parry:   { gap: 0.1,  play: (d, t) => { tone(d, 'triangle', 1180, t, 0.28, 0.08); tone(d, 'sine', 1770, t, 0.22, 0.05); tone(d, 'sine', 2650, t, 0.12, 0.03); } },
+  block:   { gap: 0.06, play: (d, t) => { tone(d, 'square', 1500, t, 0.08, 0.05, { lowpass: 4000 }); noise(d, t, 0.04, 0.08, 'highpass', 4000); } },
+  hurt:    { gap: 0.12, play: (d, t) => tone(d, 'sawtooth', 240, t, 0.16, 0.08, { glideTo: 110, lowpass: 1400 }) },
+  enemyShoot: { gap: 0.09, play: (d, t) => tone(d, 'sine', 900, t, 0.08, 0.035, { glideTo: 380 }) },
+  bossShoot:  { gap: 0.15, play: (d, t) => { tone(d, 'sawtooth', 160, t, 0.3, 0.06, { glideTo: 70, lowpass: 900 }); noise(d, t, 0.25, 0.05, 'lowpass', 600); } },
+  enemyDie:{ gap: 0.06, play: (d, t) => { noise(d, t, 0.22, 0.14, 'lowpass', 1200); tone(d, 'square', 320, t, 0.18, 0.04, { glideTo: 70, lowpass: 1600 }); } },
+  coin:    { gap: 0.05, play: (d, t) => { tone(d, 'square', freq('E6'), t, 0.05, 0.03); tone(d, 'square', freq('B6'), t + 0.05, 0.1, 0.03); } },
+  bigCoin: { gap: 0.2,  play: (d, t) => ['E6', 'G#6', 'B6', 'E7'].forEach((n, i) => tone(d, 'square', freq(n), t + i * 0.06, 0.12, 0.035)) },
+  eat:     { gap: 0.1,  play: (d, t) => { tone(d, 'square', freq('C5'), t, 0.06, 0.05); tone(d, 'square', freq('G5'), t + 0.07, 0.1, 0.05); } },
+  heal:    { gap: 0.1,  play: (d, t) => ['C6', 'E6', 'G6'].forEach((n, i) => tone(d, 'sine', freq(n), t + i * 0.05, 0.14, 0.05)) },
+  summon:  { gap: 0.3,  play: (d, t) => { tone(d, 'sine', 220, t, 0.6, 0.06, { glideTo: 880, attack: 0.1 }); noise(d, t + 0.1, 0.4, 0.04, 'bandpass', 2500); } },
+  roar:    { gap: 0.4,  play: (d, t) => { tone(d, 'sawtooth', 110, t, 0.7, 0.09, { glideTo: 55, lowpass: 700, attack: 0.05 }); noise(d, t, 0.6, 0.12, 'lowpass', 500); } },
+  rage:    { gap: 1,    play: (d, t) => { tone(d, 'sawtooth', 70, t, 1.2, 0.12, { glideTo: 40, lowpass: 600, attack: 0.08 }); noise(d, t, 1.0, 0.16, 'lowpass', 400); tone(d, 'square', 180, t + 0.2, 0.8, 0.04, { glideTo: 90, lowpass: 900 }); } },
+  playerDown: { gap: 0.5, play: (d, t) => ['A4', 'F4', 'D4', 'A3'].forEach((n, i) => tone(d, 'square', freq(n), t + i * 0.12, 0.16, 0.05, { lowpass: 2400 })) }
+};
+const lastPlayed = {};
+function playEffect(kind, t) {
+  const fx = SFX[kind];
+  if (!fx || !sfxEnabled) return;
+  if (t - (lastPlayed[kind] ?? -1) < fx.gap) return;
+  lastPlayed[kind] = t;
+  fx.play(sfxBus, t);
 }
 
 // ---------- secuenciador ----------
@@ -324,11 +363,11 @@ export function setBattleState({ round = 1, tigre = false, boss = false } = {}) 
 export function sfx(kind) {
   if (!ctx || ctx.state !== 'running') return;
   const t = ctx.currentTime + 0.01;
-  if (kind === 'count') tone(master, 'square', freq('A4'), t, 0.14, 0.08);
+  if (kind === 'count') tone(sfxBus, 'square', freq('A4'), t, 0.14, 0.08);
   else if (kind === 'go') {
-    for (const n of ['A4', 'C#5', 'E5', 'A5']) tone(master, 'square', freq(n), t, 0.5, 0.05, { vibrato: true });
-    drum('kick', master, t);
-  }
+    for (const n of ['A4', 'C#5', 'E5', 'A5']) tone(sfxBus, 'square', freq(n), t, 0.5, 0.05, { vibrato: true });
+    drum('kick', sfxBus, t);
+  } else playEffect(kind, t);
 }
 
 // Victoria o derrota: para la música de batalla y toca la melodía corta
@@ -344,7 +383,7 @@ export function jingle(kind) {
       if (tok === '.' || tok === '-') return;
       let len = 1;
       while (steps[i + len] === '-') len++;
-      INSTRUMENTS[inst](master, freq(tok), t0 + i * sd, len * sd);
+      INSTRUMENTS[inst](musicBus, freq(tok), t0 + i * sd, len * sd);
     });
   }
 }
@@ -356,6 +395,8 @@ export function setVolume(v) { volume = Math.max(0, Math.min(1, v)); saveNumber(
 export function getVolume() { return volume; }
 export function setMusicEnabled(on) { enabled = !!on; saveNumber('salvandoOtare.musicOn', enabled ? 1 : 0); applyVolume(); }
 export function isMusicEnabled() { return enabled; }
+export function setSfxEnabled(on) { sfxEnabled = !!on; saveNumber('salvandoOtare.sfxOn', sfxEnabled ? 1 : 0); applyVolume(); }
+export function isSfxEnabled() { return sfxEnabled; }
 
 // Diagnóstico (consola): qué suena, intensidad y nivel de la señal (0 = silencio)
 export function musicStatus() {

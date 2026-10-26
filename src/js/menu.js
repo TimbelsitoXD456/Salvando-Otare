@@ -13,7 +13,7 @@ import { refreshMissions, handleMissionAction, refreshMissionBadge } from './mis
 import { survivalUnlocked } from './kills.js';
 import { getControlPrefs, setControlPref, controlModes } from './controles.js';
 import { createTouchControls, removeTouchControls } from './touch.js';
-import { initMusic, playSong, setBattleState, sfx, jingle, setDucked, setVolume, getVolume, setMusicEnabled, isMusicEnabled } from './music.js';
+import { initMusic, playSong, setBattleState, sfx, jingle, setDucked, setVolume, getVolume, setMusicEnabled, isMusicEnabled, setSfxEnabled, isSfxEnabled } from './music.js';
 
 const Screens = {
   MENU: 'screen-menu',
@@ -59,6 +59,7 @@ const app = {
     playSong('menu');
     window.addEventListener('battleState', e => { this._battleState = e.detail; setBattleState(e.detail); });
     window.addEventListener('battleEnd', e => jingle(e.detail.result));
+    window.addEventListener('sfx', e => sfx(e.detail));   // efectos de sonido de la partida (game.js)
     this.bindSettings();
     // CapoCoins: saldo en el menú y en la TIENDA
     window.addEventListener('coinsChanged', () => this.refreshCoins());
@@ -173,6 +174,8 @@ const app = {
   refreshMusicToggle(){
     const btn = document.querySelector('.music-toggle');
     if (btn) btn.textContent = `Música: ${isMusicEnabled() ? 'ON' : 'OFF'}`;
+    const fx = document.querySelector('.sfx-toggle');
+    if (fx) fx.textContent = `Efectos: ${isSfxEnabled() ? 'ON' : 'OFF'}`;
   },
 
   refreshCoins(){
@@ -298,6 +301,11 @@ const app = {
       case 'music-toggle':
         setMusicEnabled(!isMusicEnabled());
         this.refreshMusicToggle();
+        break;
+      case 'sfx-toggle':
+        setSfxEnabled(!isSfxEnabled());
+        this.refreshMusicToggle();
+        if (isSfxEnabled()) sfx('coin');   // para oír cómo suena
         break;
       case 'credits':
         this.showScreen(Screens.CREDITS);
