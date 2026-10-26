@@ -387,6 +387,7 @@ class PlayerAI {
 
   // ¿Este enemigo está sin atacar ahora? (Curados, Tigre ya invocado, tiradores sin turno, Melle recargando)
   isIdle(e) {
+    if (e.frozen > 0) return true;
     if (e.kind === 'curados') return true;
     if (e.kind === 'tigre') return !!e.summonedHorde;
     if (e.kind === 'melle') return (e.attackCooldown || 0) > 0.45;
@@ -690,7 +691,8 @@ class PlayerAI {
       if (e.kind !== 'melle') continue;
       const c = center(e);
       if (Math.hypot(c.x - s.x, c.y - s.y) <= e.attackRange - 6 + 12) {
-        const t = Math.max(0, e.attackCooldown || 0);
+        // congelado por Otarin: pegará cuando se derrita (su recarga está parada mientras tanto)
+        const t = Math.max(0, e.attackCooldown || 0) + (e.frozen || 0);
         if (!best || t < best.t) best = { t, melee: e };
       }
     }

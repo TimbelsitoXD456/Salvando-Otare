@@ -4,6 +4,7 @@
 //   BonkChanti: muñequito cuadrado estilo Minecraft (pelo negro, camiseta turquesa con dibujos,
 //   pantalón corto morado y zapatillas amarillas y rojas). Va flotando junto al jugador más herido
 //   y le lanza corazones que curan.
+//   Otarin: cubito de hielo volador; dispara bolas de hielo que congelan a los enemigos.
 import { grid, compose, outline, toCanvas, blit } from './spriteEngine.js';
 
 const PALETTE = {
@@ -113,5 +114,95 @@ export function drawHeartOrb(ctx, o, time) {
   ctx.shadowBlur = 0;
   ctx.fillStyle = '#e03b3b';
   HEART.forEach((row, y) => [...row].forEach((c, x) => { if (c === 'r') ctx.fillRect(x * 1.5 - 5.25, y * 1.5 - 4.5, 1.5, 1.5); }));
+  ctx.restore();
+}
+
+// ---------- OTARIN: cubito de hielo volador que congela a los enemigos ----------
+// Como en el primer Salvando Otare: cuerpo azul hielo con borde de escarcha blanca, ojitos azul oscuro
+// con brillo, sonrisa azulita y copitos de nieve flotando encima.
+const OTA_PAL = { W: '#ffffff', h: '#f2fdff', c: '#c0f3ff', C: '#6aeaff', d: '#3fb8d8', e: '#0e3970', s: '#2f9fd6' };
+const OTA = [
+  '.WWWWWWWWWWWW.',
+  'WhhhcccccccccW',
+  'WhhccccccccCCW',
+  'WhcccccccccCCW',
+  'WccccccccCCCCW',
+  'WcceecccceeCCW',
+  'WcceWcccceWCdW',
+  'WcceecccceeCdW',
+  'WccCCccccCCCdW',
+  'WcCCsCCCCsCddW',
+  'WCCCCssssCCddW',
+  'WCCCCCCCCCdddW',
+  'WCdCdddddddddW',
+  '.WWWWWWWWWWWW.'
+];
+let otaImg = null;
+function otarinImage() {
+  if (otaImg) return otaImg;
+  const c = document.createElement('canvas');
+  c.width = OTA[0].length; c.height = OTA.length;
+  const g = c.getContext('2d');
+  OTA.forEach((row, y) => [...row].forEach((ch, x) => { if (ch !== '.') { g.fillStyle = OTA_PAL[ch]; g.fillRect(x, y, 1, 1); } }));
+  return (otaImg = c);
+}
+
+// o: { x, y (centro), facing, shootT } · time: reloj de la partida
+export function drawOtarin(ctx, o, time) {
+  const bob = Math.sin(time * 2.6 + 1) * 4;
+  const S = 2, img = otarinImage(), w = img.width * S, h = img.height * S;
+  const x = Math.round(o.x - w / 2), y = Math.round(o.y - h / 2 + bob);
+  ctx.save();
+  // brillo frío alrededor (más fuerte justo al disparar)
+  const shooting = time - (o.shootT ?? -9) < 0.25;
+  ctx.shadowColor = '#6aeaff'; ctx.shadowBlur = shooting ? 22 : 12;
+  ctx.imageSmoothingEnabled = false;
+  if (o.facing < 0) { ctx.translate(x + w, y); ctx.scale(-1, 1); ctx.drawImage(img, 0, 0, w, h); }
+  else ctx.drawImage(img, x, y, w, h);
+  ctx.restore();
+  // copitos de nieve que flotan encima
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  for (let i = 0; i < 3; i++) {
+    const fy = y - 6 - ((time * 12 + i * 7) % 14), fx = x + 6 + i * 8 + Math.sin(time * 3 + i) * 2;
+    ctx.fillRect(Math.round(fx), Math.round(fy), 2, 2);
+  }
+  ctx.font = '8px "Press Start 2P", monospace';
+  const label = 'Otarin', lx = Math.round(o.x - ctx.measureText(label).width / 2), ly = y - 20;
+  ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(12,10,24,0.9)';
+  ctx.strokeText(label, lx, ly);
+  ctx.fillStyle = '#9ff4ff'; ctx.fillText(label, lx, ly);
+}
+
+// Bola de hielo: orbe azul con borde blanco y un copo de nieve que gira
+export function drawIceShot(ctx, s, time) {
+  ctx.save();
+  ctx.translate(Math.round(s.x), Math.round(s.y));
+  ctx.shadowColor = '#6aeaff'; ctx.shadowBlur = 14;
+  ctx.fillStyle = 'rgba(106,234,255,0.85)';
+  ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.rotate(time * 6);
+  ctx.lineWidth = 1.5;
+  for (let k = 0; k < 3; k++) { ctx.rotate(Math.PI / 3); ctx.beginPath(); ctx.moveTo(-5, 0); ctx.lineTo(5, 0); ctx.stroke(); }
+  ctx.restore();
+}
+
+// Enemigo congelado: bloque de hielo translúcido encima, con brillos (se derrite al final)
+export function drawFrozen(ctx, e, time) {
+  const left = Math.min(1, e.frozen / 0.4);                 // los últimos 0.4 s se va derritiendo
+  ctx.save();
+  ctx.globalAlpha = 0.25 + 0.4 * left;
+  ctx.fillStyle = '#9fe9ff';
+  ctx.fillRect(Math.round(e.x - 4), Math.round(e.y - 4), e.w + 8, e.h + 6);
+  ctx.globalAlpha = 0.8 * left + 0.2;
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
+  ctx.strokeRect(Math.round(e.x - 4), Math.round(e.y - 4), e.w + 8, e.h + 6);
+  ctx.fillStyle = '#ffffff';
+  const tw = (time * 3) % 1;
+  ctx.fillRect(Math.round(e.x + 4), Math.round(e.y + 4), 6, 2);
+  ctx.fillRect(Math.round(e.x + 4), Math.round(e.y + 4), 2, 8);
+  ctx.globalAlpha = 1 - tw;
+  ctx.fillRect(Math.round(e.x + e.w - 6), Math.round(e.y + e.h * 0.3), 2, 2);
   ctx.restore();
 }

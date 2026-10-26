@@ -14,7 +14,8 @@ export const ITEMS = {
   armor:    { name: 'Armadura',     price: 800, desc: 'Los golpes y disparos enemigos hacen un 25 % menos de daño.' },
   coinsx2:  { name: 'X2 Monedas',   price: 675, desc: 'Ganas el doble de CapoCoins por cada enemigo.' },
   // ayudante (del primer Salvando Otare): vuela junto al jugador más herido y le lanza corazones (game.js)
-  bonkchanti: { name: 'BonkChanti', price: 1250, desc: 'Ayudante: vuela junto al más herido y le lanza corazones que curan.' }
+  bonkchanti: { name: 'BonkChanti', price: 1250, desc: 'Ayudante: vuela junto al más herido y le lanza corazones que curan.' },
+  otarin:   { name: 'Otarin',       price: 1850, desc: 'Ayudante: cubito de hielo que congela a los enemigos más peligrosos.' }
 };
 
 // Opciones del selector "Objetos" de Predicción y Entrenamiento (simular con objetos de la tienda)
@@ -27,10 +28,11 @@ export const BOOST_OPTIONS = {
   health:   { label: 'Vida',      boosts: { health: true } },
   armor:    { label: 'Armadura',  boosts: { armor: true } },
   bonk:     { label: 'BonkChanti', boosts: { bonkchanti: true } },
-  all:      { label: 'Todos',     boosts: { speed: true, strength: true, health: true, armor: true, coinsx2: true, bonkchanti: true } }
+  otarin:   { label: 'Otarin',    boosts: { otarin: true } },
+  all:      { label: 'Todos',     boosts: { speed: true, strength: true, health: true, armor: true, coinsx2: true, bonkchanti: true, otarin: true } }
 };
 // Texto de una opción: 'Mis objetos (VEL, FUE, VIDA, BONK)'
-const SHORT = { speed: 'VEL', strength: 'FUE', health: 'VIDA', armor: 'ARM', coinsx2: 'x2$', bonkchanti: 'BONK' };
+const SHORT = { speed: 'VEL', strength: 'FUE', health: 'VIDA', armor: 'ARM', coinsx2: 'x2$', bonkchanti: 'BONK', otarin: 'OTA' };
 export function boostLabel(key) {
   if (key !== 'mine') return (BOOST_OPTIONS[key] || BOOST_OPTIONS.none).label;
   const on = Object.entries(getActiveBoosts()).filter(([, v]) => v).map(([k]) => SHORT[k] || k);
@@ -79,7 +81,7 @@ export function getActiveBoosts() {
   load();
   return { speed: wallet.items.speed === true, strength: wallet.items.strength === true, health: wallet.items.health === true,
     armor: wallet.items.armor === true, coinsx2: wallet.items.coinsx2 === true,
-    bonkchanti: wallet.items.bonkchanti === true };
+    bonkchanti: wallet.items.bonkchanti === true, otarin: wallet.items.otarin === true };
 }
 
 export function earnCoins(n) {

@@ -7,7 +7,7 @@ import { FOOD_TYPES, FOOD_LIFETIME, FOOD_SPAWN_FIRST, FOOD_SPAWN_INTERVAL, FOOD_
   randomFoodKind, drawFood, drawFloatText } from './food.js';
 import { drawPlayer } from './playerSprites.js';
 import { drawEnemy, drawPill, drawEnergyBall, HAS_SPRITE } from './enemySprites.js';
-import { drawBonkChanti, drawHeartOrb } from './ayudantes.js';
+import { drawBonkChanti, drawHeartOrb, drawOtarin, drawIceShot, drawFrozen } from './ayudantes.js';
 import { drawBackdrop, drawGround, drawPlatform } from './mapa.js';
 
 let canvas, ctx, loopHandle, resizeObserver;
@@ -22,6 +22,8 @@ let foodSpawnTimer = FOOD_SPAWN_FIRST;
 let gameTime = 0;      // reloj de la partida (anima la comida)
 let helper = null;     // ayudante BonkChanti (objeto de la TIENDA), o null
 let heartOrbs = [];    // corazones curativos que lanza BonkChanti
+let otarin = null;     // ayudante Otarin (objeto de la TIENDA), o null
+let iceShots = [];     // bolas de hielo de Otarin
 let world = { 
   gravity: 1800, 
   groundOffset: 80,
@@ -337,6 +339,9 @@ function setupPlayers(canvasW, canvasH) {
   // ayudante BonkChanti: aparece junto a Lanzziano
   helper = boosts.bonkchanti ? { x: players[0].x - 30, y: players[0].y + 20, facing: 1, cooldown: BONK.firstThrow, throwT: null } : null;
   heartOrbs = [];
+  // ayudante Otarin: aparece junto a Jhoabxi
+  otarin = boosts.otarin ? { x: players[1].x + 40, y: players[1].y - 40, facing: 1, cooldown: OTARIN.firstShot, shootT: null } : null;
+  iceShots = [];
   runCoins = 0;
   simStats = newSimStats();
   bullets = []; enemyBullets = []; enemies = [];
@@ -424,7 +429,7 @@ function anyPlayerAlive() { return players.some(p => p.alive && p.hp > 0); }
 function newSimStats() {
   return {
     time: 0, kills: [0, 0], damage: [{ melle: 0, bala: 0, pinchos: 0 }, { melle: 0, bala: 0, pinchos: 0 }],
-    healed: [0, 0], food: { spawned: 0, eaten: 0, expired: 0 }
+    healed: [0, 0], food: { spawned: 0, eaten: 0, expired: 0 }, freezes: 0
   };
 }
 // ARMADURA (objeto de la TIENDA): los golpes y disparos enemigos hacen menos daño (los pinchos no)
@@ -462,10 +467,11 @@ function resizeCanvasInternal() {
 }
 
 function shiftWorldY(dy) {
-  for (const list of [players, enemies, bullets, enemyBullets, platforms, foods, floatTexts, heartOrbs]) {
+  for (const list of [players, enemies, bullets, enemyBullets, platforms, foods, floatTexts, heartOrbs, iceShots]) {
     for (const o of list) o.y += dy;
   }
   if (helper) helper.y += dy;
+  if (otarin) otarin.y += dy;
 }
 
 // Jefe: fase de furia al llegar a esta fracción de vida
@@ -482,6 +488,24 @@ function updateEnemies(dt) {
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
     if (!e.alive) continue;
+
+    // CONGELADO por Otarin: no se mueve ni ataca y sus temporizadores se paran (se le puede seguir pegando)
+    if (e.frozen > 0) {
+      e.frozen = Math.max(0, e.frozen - dt);
+      // sobre el hielo resbala: si le pegan sale deslizando (el empujón del golpe se mantiene y se frena poco a poco)
+      e.vx *= Math.max(0, 1 - 8 * dt);
+      e.x = Math.max(0, Math.min(world.mapWidth - e.w, e.x + e.vx * dt));
+      // el Tigre sigue cargando su rugido aunque esté congelado: al invocar a su horda rompe el hielo
+      if (e.kind === 'tigre' && !e.summonedHorde) {
+        e.shootTimer = (e.shootTimer || 0) - dt;
+        if (e.shootTimer <= 0) { e.frozen = 0; spawnTigerMinions(e); playSfx('roar'); e.summonedHorde = true; e.flash = 0.25; }
+      }
+      // al descongelarse tarda un poco en reaccionar
+      if (e.frozen === 0) e.attackCooldown = Math.max(e.attackCooldown || 0, 0.5);
+      if (e.flash > 0) e.flash = Math.max(0, e.flash - dt);
+      if (e.hp <= 0) killEnemy(e);
+      continue;
+    }
 
     // find nearest player target
     let target = findNearestPlayer(e.x + e.w / 2, e.y + e.h / 2);
@@ -813,6 +837,83 @@ function updateHelper(dt, W) {
   }
 }
 
+// --- Ayudante Otarin (dibujo en ayudantes.js) ---
+// En el primer Salvando Otare disparaba cada 0.4 s y congelaba 2.5 s a cualquiera (también al jefe): eso
+// dejaba a los enemigos congelados casi siempre. Aquí dispara menos, congela menos rato, elige al enemigo
+// más PELIGROSO para los jugadores (no al más cercano a él) y el jefe es inmune al hielo.
+const OTARIN = {
+  speed: 300,        // vuela (px/s)
+  cooldown: 2.4,     // segundos entre bolas de hielo
+  firstShot: 1.5,
+  range: 360,        // solo apunta a enemigos a esta distancia de algún jugador
+  shotSpeed: 420,    // las bolas persiguen a su enemigo
+  shotLife: 2.0,
+  freeze: 1.5,       // segundos congelado
+  splash: 60,        // la bola estalla: congela también a los que estén pegados a su objetivo...
+  splashMax: 1       // ...como mucho a 1 más (con grupos grandes congelaba a todos y rompía el juego)
+};
+
+// Lo peligroso que es un enemigo ahora mismo para los jugadores (para elegir a quién congelar)
+function otarinThreat(e) {
+  const c = { x: e.x + e.w / 2, y: e.y + e.h / 2 };
+  let d = Infinity;
+  for (const p of players) if (p.alive) d = Math.min(d, Math.hypot(p.x + p.w / 2 - c.x, p.y + p.h / 2 - c.y));
+  if (d > OTARIN.range) return -Infinity;
+  // las balas son lo que más daño hace (medido en simulación): primero los tiradores con turno de disparo
+  let score = { melle: 2, fuerte: 2.5, juan: 2, shotter: 2, oscar: 1.5, tigre: 1.5, curados: 2, boss: 0 }[e.kind] ?? 1;
+  if (e.kind === 'melle' && d < 90) score += 1.5;          // a punto de pegar
+  if (e.canShoot) score += 4;                              // tiene turno de disparo: congelado no dispara
+  return score - d / 150;
+}
+
+function updateOtarin(dt, W) {
+  if (!otarin) return;
+  const aimed = new Set(iceShots.map(s => s.target));
+  let target = null, best = -Infinity;
+  for (const e of enemies) {
+    if (!e.alive || e.frozen > 0 || aimed.has(e) || e.kind === 'boss') continue;   // el jefe es inmune al hielo
+    const s = otarinThreat(e);
+    if (s > best) { best = s; target = e; }
+  }
+  // dónde flotar: encima del enemigo elegido, del lado de los jugadores; si no, encima de los jugadores
+  const alive = players.filter(p => p.alive);
+  if (!alive.length) return;
+  const midX = alive.reduce((a, p) => a + p.x + p.w / 2, 0) / alive.length;
+  let wantX = midX + 60, wantY = Math.min(...alive.map(p => p.y)) - 70;
+  if (target) {
+    const tx = target.x + target.w / 2, side = Math.sign(tx - midX) || 1;
+    wantX = tx - side * 80; wantY = target.y - 70;
+  }
+  wantX = Math.max(world.cameraX + 30, Math.min(world.cameraX + W - 30, wantX));
+  const dx = wantX - otarin.x, dy = wantY - otarin.y, d = Math.hypot(dx, dy);
+  if (d > 1) { const step = Math.min(d, OTARIN.speed * dt); otarin.x += dx / d * step; otarin.y += dy / d * step; }
+  if (target) otarin.facing = Math.sign(target.x + target.w / 2 - otarin.x) || otarin.facing;
+  otarin.cooldown -= dt;
+  if (otarin.cooldown <= 0 && target) {
+    iceShots.push({ x: otarin.x, y: otarin.y, w: 14, h: 14, target, life: OTARIN.shotLife });
+    otarin.cooldown = OTARIN.cooldown;
+    otarin.shootT = gameTime;
+    playSfx('iceShot');
+  }
+  // bolas de hielo: persiguen a su enemigo y lo congelan al tocarlo
+  for (let i = iceShots.length - 1; i >= 0; i--) {
+    const s = iceShots[i], e = s.target;
+    s.life -= dt;
+    if (s.life <= 0 || !e.alive) { iceShots.splice(i, 1); continue; }
+    const ex = e.x + e.w / 2, ey = e.y + e.h / 2, ddx = ex - s.x, ddy = ey - s.y, dd = Math.hypot(ddx, ddy) || 1;
+    s.x += ddx / dd * OTARIN.shotSpeed * dt; s.y += ddy / dd * OTARIN.shotSpeed * dt;
+    if (dd < Math.max(14, e.w / 2)) {
+      e.frozen = OTARIN.freeze;
+      enemies.filter(o => o !== e && o.alive && o.kind !== 'boss' && Math.hypot(o.x + o.w / 2 - ex, o.y + o.h / 2 - ey) <= OTARIN.splash)
+        .slice(0, OTARIN.splashMax).forEach(o => { o.frozen = Math.max(o.frozen || 0, OTARIN.freeze); });
+      floatTexts.push({ x: ex - 18, y: e.y - 16, text: '¡CONGELADO!', color: '#9ff4ff', life: 1.0 });
+      playSfx('freeze');
+      simStats.freezes++;
+      iceShots.splice(i, 1);
+    }
+  }
+}
+
 // PHYSICS: movimientos + manejo de ataques, collisions and regen
 function physicsUpdate(dt) {
   if (!hasWorld()) return;
@@ -1045,8 +1146,11 @@ function physicsUpdate(dt) {
           p.hitFlash = 0.12;
           playSfx('hurt');
           p.regenTimer = p.regenDelay;
-          // Bounce up
-          p.vy = -300;
+          // rebote que ALEJA del zarzal: hacia arriba si cae encima, hacia abajo si lo toca por debajo
+          // (antes siempre hacia arriba: tocándolo por debajo te metía dentro y dañaba en cada frame)
+          const fromBelow = p.y + p.h / 2 > plat.y + plat.h / 2;
+          p.vy = fromBelow ? 300 : -300;
+          if (fromBelow) p.y = Math.max(p.y, plat.y + plat.h);
           break;
         }
         
@@ -1082,7 +1186,7 @@ function physicsUpdate(dt) {
     }
   }); // end players.forEach
 
-  if (!gameOver) { updateFoods(dt); updateHelper(dt, W); }
+  if (!gameOver) { updateFoods(dt); updateHelper(dt, W); updateOtarin(dt, W); }
   updateCamera(W);
 
   // advance rounds when enemies dead
@@ -1184,6 +1288,7 @@ function render() {
         ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
       }
       drawEnemy(ctx, e, { time: gameTime, target });
+      if (e.frozen > 0 && e.alive) drawFrozen(ctx, e, gameTime);   // bloque de hielo de Otarin
       if (!e.alive) return;
     } else {
       if (!e.alive) {
@@ -1270,6 +1375,9 @@ function render() {
   // ayudante BonkChanti y sus corazones
   if (helper) drawBonkChanti(ctx, helper, gameTime);
   heartOrbs.forEach(o => drawHeartOrb(ctx, o, gameTime));
+  // ayudante Otarin y sus bolas de hielo
+  if (otarin) drawOtarin(ctx, otarin, gameTime);
+  iceShots.forEach(s => drawIceShot(ctx, s, gameTime));
 
   floatTexts.forEach(t => drawFloatText(ctx, t));
 
@@ -1300,7 +1408,7 @@ function render() {
     ctx.fillStyle = '#ffd24a'; ctx.font = '12px "Press Start 2P", monospace';
     outlinedText(ctx, `${getCoins()}`, hudX + 24, cy + 12);
     if (runCoins > 0) { ctx.fillStyle = '#fff3b0'; ctx.font = '9px "Press Start 2P", monospace'; outlinedText(ctx, `+${runCoins} esta partida`, hudX + 110, cy + 11); }
-    const active = [['speed', 'x2 VEL'], ['strength', 'x2 FUE'], ['health', 'x2 VIDA'], ['armor', 'ARMADURA'], ['coinsx2', 'x2 MONEDAS'], ['bonkchanti', 'BONKCHANTI']].filter(([k]) => boosts[k]).map(([, t]) => t);
+    const active = [['speed', 'x2 VEL'], ['strength', 'x2 FUE'], ['health', 'x2 VIDA'], ['armor', 'ARMADURA'], ['coinsx2', 'x2 MONEDAS'], ['bonkchanti', 'BONKCHANTI'], ['otarin', 'OTARIN']].filter(([k]) => boosts[k]).map(([, t]) => t);
     if (active.length) { ctx.fillStyle = '#ff6bec'; ctx.font = '8px "Press Start 2P", monospace'; outlinedText(ctx, active.join('  '), hudX, cy + 30); }
   }
 
@@ -1472,7 +1580,7 @@ export function stop() {
   else window.removeEventListener('resize', resizeCanvasInternal);
   if (canvas) canvas.removeEventListener('click', handleGameOverClick);
   gameOver = false; gameOverType = ''; lastGroundY = null;
-  canvas = null; ctx = null; players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; helper = null; heartOrbs = []; onResizeCallback = null; resetInput();
+  canvas = null; ctx = null; players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; helper = null; heartOrbs = []; otarin = null; iceShots = []; onResizeCallback = null; resetInput();
 }
 // --- Modo predicción ---
 // Corre una partida de simulación IA completa sin canvas ni requestAnimationFrame: física con dt fijo
@@ -1534,11 +1642,12 @@ export function runHeadless({ seed = 1, maxSeconds = 600, onProgress, isCancelle
         damage: simStats.damage.map(d => ({ ...d })),
         healed: [...simStats.healed],
         food: { ...simStats.food },
+        freezes: simStats.freezes,
         modeFrames
       };
       headlessView = null; headlessBusy = false; simulationMode = false; aiParams = null; boosts = {};
       gameOver = false; gameOverType = '';
-      players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; helper = null; heartOrbs = [];
+      players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; helper = null; heartOrbs = []; otarin = null; iceShots = [];
       resolve(result);
     };
     const chunk = () => {

@@ -32,6 +32,7 @@ as $$
     when 'armor'    then 800   -- Armadura
     when 'coinsx2'  then 675   -- X2 Monedas
     when 'bonkchanti' then 1250 -- ayudante BonkChanti
+    when 'otarin'   then 1850  -- ayudante Otarin
   end;
 $$;
 
