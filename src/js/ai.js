@@ -14,6 +14,11 @@
 //        COMER     ir a por comida: ya si va justo de vida o se va a perder; si no, guardarla para luego
 //                  (no come si le falta poca vida, deja la comida al compañero si la necesita más)
 //   2. Táctica: moverse, golpear, disparar, saltar a plataformas.
+//        - elige al enemigo más VULNERABLE (muere en pocos golpes, no está atacando, está solo, al alcance)
+//        - golpea de oportunidad a cualquier enemigo que tenga delante, aunque no sea su objetivo
+//        - LEE EL TERRENO: antes de saltar simula el salto con la física del juego (¿aterriza en la
+//          plataforma?, ¿se da con la cabeza?, ¿cae en un zarzal?) y solo salta si sale bien
+//        - con BONKCHANTI: no huye de los corazones que le lanza y, herido, se acerca a él
 //   3. Reflejos: parry, dash o salto ante una bala o golpe inminente (siempre activos).
 // Cada jugador tiene su propia IA; se coordinan leyendo el modo del compañero (partner.input.mode).
 
@@ -23,8 +28,6 @@ const STEP = 1 / 60;              // resolución de esa predicción
 const JUMP_WINDOW = [0.12, 0.45]; // si no hay parry ni dash, salta: ni muy pronto (no sube a tiempo) ni muy tarde
 const MELEE_PRESS_RATE = 0.1;     // como mucho 10 golpes por segundo, como alguien machacando la tecla
 const CORNER_MARGIN = 40;         // a esta distancia del borde se considera acorralado
-const SPIKE_JUMP_CLEARANCE = 150; // no saltar si hay pinchos a esta distancia horizontal y a alcance de salto
-const JUMP_REACH = 170;           // altura que alcanza un salto (~144 px) con margen
 
 // --- parámetros ajustables (el modo Entrenamiento los optimiza dentro de [min, max]) ---
 // def = valor de la IA original, hecho a mano y medido en simulación.
@@ -64,6 +67,16 @@ export const AI_PARAM_SPACE = {
   targetLowHp:        { def: 2,    min: 0,    max: 5,    label: 'Peso: enemigo casi muerto' },
   targetShooting:     { def: 2,    min: 0,    max: 5,    label: 'Peso: tirador activo' },
   targetDistance:     { def: 250,  min: 100,  max: 600,  label: 'Distancia que resta 1 punto (px)' },
+  // enemigo vulnerable: muere en pocos golpes, no está atacando, está solo
+  targetFewHits:      { def: 3,    min: 0,    max: 6,    label: 'Peso: muere en pocos golpes' },
+  targetIdle:         { def: 0,    min: 0,    max: 4,    label: 'Peso: enemigo que no ataca' },
+  targetIsolated:     { def: 0,    min: 0,    max: 4,    label: 'Peso: enemigo solo' },
+  targetOffscreen:    { def: 3,    min: 0,    max: 6,    label: 'Castigo: fuera de pantalla' },
+  shooterFocus:       { def: 0,    min: 0,    max: 1,    label: 'Jhoabxi se coloca para el mejor tiro' },   // medido: moverse le hace disparar peor
+  // BonkChanti: dejarse alcanzar por sus corazones y, herido, acercarse a él
+  bonkCatch:          { def: 1,    min: 0,    max: 1,    label: 'Espera los corazones de BonkChanti' },
+  bonkSeekHp:         { def: 0.6,  min: 0.2,  max: 0.9,  label: 'Se acerca a BonkChanti con vida' },
+  bonkBraveness:      { def: 0.1,  min: 0,    max: 0.25, label: 'Con BonkChanti se retira más tarde' },
   // comida: cuándo comer ya y cuándo guardarla
   eatHp:              { def: 0.5,  min: 0.2,  max: 0.9,  label: 'Come ya con vida bajo' },
   eatMinUseful:       { def: 0.8,  min: 0.3,  max: 1.0,  label: 'Si no, come si aprovecha (fracción)' },
@@ -116,6 +129,33 @@ function spikesNear(self, platforms, extra, above) {
     && pl.y + pl.h >= self.y - above && pl.y <= self.y + self.h + 10);
 }
 
+// ---------- lectura del terreno ----------
+// Simula un salto (o una caída) con la misma física que game.js: acelerar hacia `dir`, gravedad, choques
+// con las plataformas sólidas (desde arriba aterriza, desde abajo se da con la cabeza) y zarzales.
+// Devuelve { land: plataforma donde aterriza (null = suelo), t, bonkT: cuándo se da con la cabeza, spike }
+const SIM_DT = 1 / 30;
+function simulateJump(view, dir, jump = true, maxT = 1.3) {
+  const self = view.self, g = view.gravity || 1800;
+  const groundPl = view.platforms.reduce((a, b) => (b.w > a.w ? b : a), view.platforms[0]);
+  let x = self.x, y = self.y, vx = self.vx, vy = jump ? -self.jumpPower : self.vy;
+  const out = { land: null, t: maxT, bonkT: Infinity, spike: false };
+  for (let t = SIM_DT; t <= maxT; t += SIM_DT) {
+    const target = dir * self.maxSpeed, dv = target - vx;
+    vx += Math.sign(dv) * Math.min(Math.abs(dv), self.accel * SIM_DT);
+    vy += g * SIM_DT;
+    x += vx * SIM_DT; y += vy * SIM_DT;
+    const box = { x, y, w: self.w, h: self.h };
+    for (const pl of view.platforms) {
+      if (!overlap(box, pl)) continue;
+      if (pl.type === 'spike') { out.spike = true; continue; }
+      if (vy > 0) { out.land = pl === groundPl ? null : pl; out.t = t; return out; }
+      if (vy < 0) { y = pl.y + pl.h; vy = 0; out.bonkT = Math.min(out.bonkT, t); }
+    }
+    if (y + self.h >= groundPl.y && vy > 0) { out.t = t; return out; }
+  }
+  return out;
+}
+
 class PlayerAI {
   constructor(role, params) {
     this.role = role;
@@ -144,9 +184,11 @@ class PlayerAI {
   isDown(action) { return this.held.has(action); }
   wasPressed(action) { return this.pressed.delete(action); }
 
-  // Saltar solo si no hay pinchos a alcance del salto
-  jump() {
-    if (spikesNear(this.view.self, this.view.platforms, SPIKE_JUMP_CLEARANCE, JUMP_REACH)) return false;
+  // Saltar solo si el salto sale bien: simula el salto (en la dirección en que se mueve) y no salta si
+  // caería en un zarzal o se daría con la cabeza contra un tablón justo encima (frena y cae donde estaba)
+  jump(dir = Math.sign(this.view.self.vx)) {
+    const sim = simulateJump(this.view, dir);
+    if (sim.spike || sim.bonkT < 0.3) return false;
     this.pressed.add('jump');
     return true;
   }
@@ -161,9 +203,14 @@ class PlayerAI {
     const s = this.analyze(view);
     this.mode = this.chooseMode(s);
 
+    this.clock = (this.clock || 0) + dt;
     let move = this.act(s);
+    move = this.catchHeart(s, move);
+    move = this.unstick(s, move, dt);
     const dodgeMove = this.dodge(view, s.enemies);
     if (dodgeMove !== null) move = dodgeMove;
+    // Lanzziano pega a cualquier enemigo que tenga delante, haga lo que haga (golpe gratis)
+    if (this.role === 'melee') this.opportunisticHit(s, move || view.self.facing);
 
     // encima o dentro de pinchos: salir por el borde más cercano (lo más prioritario)
     const spike = spikesNear(view.self, view.platforms, 0, 60);
@@ -188,8 +235,11 @@ class PlayerAI {
     const swarm = melles.filter(e => hDist(e, self) < this.p.swarmRadius).length;
     // centro de masas de los enemigos (para saber "hacia dónde está la pelea")
     const front = enemies.length ? enemies.reduce((sum, e) => sum + center(e).x, 0) / enemies.length : center(self).x;
+    // BonkChanti: dónde está y si viene un corazón hacia mí
+    const helper = view.helper || null;
+    const myOrb = (view.heartOrbs || []).find(o => o.target === self) || null;
     return {
-      self, partner, enemies, melles, hp, ground, bounds, damage, swarm, front,
+      self, partner, enemies, melles, hp, ground, bounds, damage, swarm, front, helper, myOrb,
       foods: view.foods || [],
       partnerMode: partner?.input?.mode || null,
       onPlatform: this.standingOn(self, platforms, ground)
@@ -205,9 +255,10 @@ class PlayerAI {
     if (s.enemies.length === 0) { this.retreating = false; return food ? eat() : 'regroup'; }
 
     // histéresis: entra en retirada con poca vida y no sale hasta haberse curado bien
-    const r = this.retreatRule;
-    if (this.retreating && s.hp >= r.recover) this.retreating = false;
-    if (!this.retreating && (s.hp < r.hp || (s.hp < r.swarmed && s.swarm >= 3))) this.retreating = true;
+    // con BonkChanti curando se puede aguantar un poco más en la pelea antes de retirarse
+    const r = this.retreatRule, brave = s.helper ? this.p.bonkBraveness : 0;
+    if (this.retreating && s.hp >= r.recover - brave) this.retreating = false;
+    if (!this.retreating && (s.hp < r.hp - brave || (s.hp < r.swarmed - brave && s.swarm >= 3))) this.retreating = true;
 
     // con poca vida, comer va antes que rematar
     if (food && s.hp < this.p.eatHp) return eat();
@@ -317,14 +368,36 @@ class PlayerAI {
     return best;
   }
 
-  // El objetivo más valioso: tipo peligroso, poca vida, tirador con turno, cercanía
+  // Puntuación de un enemigo como objetivo: tipo peligroso, vulnerable (muere en pocos golpes, no está
+  // atacando, solo), tirador con turno, cerca y dentro de la pantalla (fuera, la cámara no deja llegar)
+  targetScore(s, e) {
+    const p = this.p;
+    let score = this.kindPriority[e.kind] ?? 1;
+    score += (1 - e.hp / e.maxHp) * p.targetLowHp;           // casi muerto: más fácil de quitar de en medio
+    const hits = Math.max(1, Math.ceil(e.hp / Math.max(1, s.damage)));
+    score += p.targetFewHits / hits;                          // 1 golpe: +peso entero; 3 golpes: un tercio
+    if (e.canShoot) score += p.targetShooting;               // ahora mismo está disparando
+    else if (this.isIdle(e)) score += p.targetIdle;          // no ataca: se le pega sin riesgo
+    if (!s.enemies.some(o => o !== e && hDist(o, e) < 110)) score += p.targetIsolated;  // solo: nadie lo cubre
+    const cx = center(e).x;
+    if (cx < s.bounds.left - 10 || cx > s.bounds.right + 10) score -= p.targetOffscreen;
+    score -= hDist(e, s.self) / p.targetDistance;            // pero no cruzar el mapa por él
+    return score;
+  }
+
+  // ¿Este enemigo está sin atacar ahora? (Curados, Tigre ya invocado, tiradores sin turno, Melle recargando)
+  isIdle(e) {
+    if (e.kind === 'curados') return true;
+    if (e.kind === 'tigre') return !!e.summonedHorde;
+    if (e.kind === 'melle') return (e.attackCooldown || 0) > 0.45;
+    if (e.kind === 'boss') return false;
+    return !e.canShoot;
+  }
+
   pickTarget(s) {
     let best = null, bestScore = -Infinity;
     for (const e of s.enemies) {
-      let score = this.kindPriority[e.kind] ?? 1;
-      score += (1 - e.hp / e.maxHp) * this.p.targetLowHp;    // casi muerto: más fácil de quitar de en medio
-      if (e.canShoot) score += this.p.targetShooting;       // ahora mismo está disparando
-      score -= hDist(e, s.self) / this.p.targetDistance;    // pero no cruzar el mapa por él
+      const score = this.targetScore(s, e);
       if (score > bestScore) { bestScore = score; best = e; }
     }
     return best;
@@ -357,18 +430,39 @@ class PlayerAI {
     const sx = center(self).x, t = center(target);
     const dx = t.x - sx;
     const dir = Math.sign(dx) || self.facing;
-    const reach = self.w / 2 + this.view.meleeRange + target.w / 2 - 6;
-    if (Math.abs(dx) > reach || Math.abs(t.y - center(self).y) > 50) {
+    if (!this.inReach(self, target)) {
+      // de camino: pegar a lo que tenga delante (golpe gratis) sin dejar de avanzar
+      this.opportunisticHit(s, dir);
       // si está subido a una plataforma, bajarse andando hacia el objetivo
       return dir;
     }
-    // un Melle demasiado cerca: retroceder un paso y pegarle desde fuera de su alcance
-    if (s.melles.some(e => Math.abs(center(e).x - sx) < this.p.melleSpacing)) return -dir;
-    if (this.meleeTimer <= 0) {
-      this.pressed.add('melee');
-      this.meleeTimer = MELEE_PRESS_RATE;
-    }
+    this.pressMelee();
+    // un Melle a punto de pegar y demasiado cerca: retroceder un paso. Solo si no puede hacer parry:
+    // al moverse se gira, y de espaldas no puede golpear (antes retrocedía siempre y no pegaba nunca)
+    const danger = s.melles.find(e => Math.abs(center(e).x - sx) < this.p.melleSpacing && (e.attackCooldown || 0) < 0.25);
+    if (danger && self.parryTimer > 0 && self.facing === dir) return -dir;
     return self.facing === dir ? 0 : dir; // en rango: solo girarse si mira al lado contrario
+  }
+
+  // ¿Le alcanza el puñetazo? (misma altura y a distancia de golpe)
+  inReach(self, e) {
+    const reach = self.w / 2 + this.view.meleeRange + e.w / 2 - 6;
+    return Math.abs(center(e).x - center(self).x) <= reach && Math.abs(center(e).y - center(self).y) <= 50;
+  }
+
+  pressMelee() {
+    if (this.meleeTimer > 0) return;
+    this.pressed.add('melee');
+    this.meleeTimer = MELEE_PRESS_RATE;
+  }
+
+  // Golpe de oportunidad: un enemigo al alcance en la dirección en que va (no se gira para no frenarse)
+  opportunisticHit(s, dir) {
+    if (this.role !== 'melee' || s.self.facing !== dir) return false;
+    const sx = center(s.self).x;
+    if (!s.enemies.some(e => this.inReach(s.self, e) && Math.sign(center(e).x - sx) === dir)) return false;
+    this.pressMelee();
+    return true;
   }
 
   // Jhoabxi: alejarse de los Melle sin dejar de disparar
@@ -402,6 +496,11 @@ class PlayerAI {
     const danger = melles.length ? melles : enemies;
     const closest = nearest(self, danger);
     if (!closest) return this.regroup(s);
+    // herido y con BonkChanti: si nadie le pisa los talones, ir hacia él (sus corazones llegan antes)
+    if (s.helper && s.hp < this.p.bonkSeekHp && hDist(closest, self) > 160) {
+      const hx = Math.max(s.bounds.left + 20, Math.min(s.bounds.right - 20, s.helper.x));
+      if (Math.sign(hx - center(self).x) !== Math.sign(center(closest).x - center(self).x)) return this.moveTo(s, hx, 30);
+    }
     // si nadie le persigue de cerca, esconderse detrás del compañero
     if (partner && hDist(closest, self) > 220) return this.moveTo(s, this.behind(s, partner, this.p.supportOffset), 30);
     return this.runFrom(s, center(closest).x);
@@ -411,10 +510,53 @@ class PlayerAI {
   // solo se recoloca detrás de Lanzziano si se ha separado demasiado de él
   support(s) {
     const { self, partner, bounds } = s;
-    if (!partner) return this.holdPosition(s);
+    if (!partner) return this.focusShot(s) ?? this.holdPosition(s);
     const tooFar = hDist(partner, self) > (bounds.right - bounds.left) * this.p.leash;
     if (tooFar) return this.moveTo(s, this.behind(s, partner, this.p.supportOffset), 40);
-    return this.holdPosition(s);
+    // Lanzziano pegado al borde de la pantalla hacia la pelea: la cámara no le deja pasar porque Jhoabxi
+    // se ha quedado atrás. Acercarse para que la cámara avance (antes Lanzziano se quedaba ahí quieto)
+    const push = Math.sign(s.front - center(partner).x);
+    if (push && this.roomTo({ self: partner, bounds }, push) < 30 && hDist(partner, self) > 90) {
+      return this.moveTo(s, center(partner).x - push * 70, 20);
+    }
+    return this.focusShot(s) ?? this.holdPosition(s);
+  }
+
+  // Las balas apuntan solas al enemigo MÁS CERCANO: para darle al más vulnerable, Jhoabxi se acerca a él
+  // hasta que sea el más cercano (sin meterse donde hay Melle). null = no hace falta moverse
+  focusShot(s) {
+    if (this.p.shooterFocus < 0.5) return null;
+    const { self } = s, sx = center(self).x;
+    const best = this.pickTarget(s), near = nearest(self, s.enemies);
+    if (!best || !near || best === near || hDist(best, self) < 140) return null;
+    const dir = Math.sign(center(best).x - sx);
+    const risky = s.melles.some(m => Math.sign(center(m).x - sx) === dir && hDist(m, self) < this.p.kiteDistance + 40);
+    if (risky || this.roomTo(s, dir) < 20) return null;
+    return dir;
+  }
+
+  // Corazón de BonkChanti en camino hacia mí: no huir de él (corre a 380 px/s y yo a 460: si huyo, no
+  // me alcanza y se pierde). Si hay un Melle encima, primero salvarse.
+  catchHeart(s, move) {
+    const o = s.myOrb;
+    if (!o || this.p.bonkCatch < 0.5 || !move) return move;
+    const sx = center(s.self).x, toOrb = Math.sign(o.x - sx);
+    if (Math.hypot(o.x - sx, o.y - center(s.self).y) > 280) return move;
+    if (s.melles.some(e => hDist(e, s.self) < 90)) return move;
+    return move === -toOrb ? 0 : move;
+  }
+
+  // Lanzziano parado sin nadie a quien pegar durante más de 1.2 s: avanzar hacia la pelea
+  unstick(s, move, dt) {
+    if (this.role !== 'melee' || !s.enemies.length || !['attack', 'cover'].includes(this.mode)) { this.stuckT = 0; return move; }
+    const busy = Math.abs(s.self.vx) > 15 || s.enemies.some(e => this.inReach(s.self, e));
+    this.stuckT = busy ? 0 : (this.stuckT || 0) + dt;
+    if (this.stuckT < 1.2) return move;
+    const dir = Math.sign(s.front - center(s.self).x) || s.self.facing;
+    if (this.roomTo(s, dir) > 10) return dir;
+    // contra el borde de la pantalla: saltar por si hay algo delante
+    if (s.self.grounded) this.jump(dir);
+    return dir;
   }
 
   // Sin moverse salvo que un Melle se acerque
@@ -468,8 +610,9 @@ class PlayerAI {
     return best;
   }
 
-  // Llegar encima de una plataforma: tomar carrerilla desde fuera y saltar
-  // (saltar desde debajo hace chocar con la cabeza)
+  // Llegar encima de una plataforma leyendo el terreno: cada frame simula el salto desde donde está; si el
+  // salto aterriza en la plataforma, salta. Si está debajo (se daría con la cabeza), sale por el borde más
+  // cercano para coger carrerilla. Funciona igual con X2 Velocidad (la simulación usa su velocidad real).
   goToPlatform(s, pl) {
     if (!pl) return this.retreat(s);
     const { self } = s;
@@ -477,18 +620,25 @@ class PlayerAI {
     if (s.onPlatform === pl) { this.runup = false; return Math.abs(sx - px) > pl.w * 0.2 ? Math.sign(px - sx) : 0; }
     if (!self.grounded) return Math.sign(px - sx) || 0;     // en el aire: dirigirse al centro
 
-    const height = s.ground.y - pl.y;
-    const [jumpMin, jumpMax] = height <= 90 ? [60, 120] : [120, 160]; // más alta, saltar desde más lejos
     const toward = Math.sign(px - sx) || 1;
-    const out = toward > 0 ? pl.x - (self.x + self.w) : self.x - (pl.x + pl.w); // distancia al borde, desde fuera
-    if (out < jumpMin) this.runup = true;
+    // ¿saltando ahora (hacia ella) cae encima? → saltar
+    const sim = simulateJump(this.view, toward);
+    if (sim.land === pl && !sim.spike) { this.runup = false; this.pressed.add('jump'); return toward; }
+    // debajo o pegado a ella: salir por el borde más cercano y volver con carrerilla
+    const under = self.x + self.w > pl.x - 30 && self.x < pl.x + pl.w + 30;
+    if (under) this.runup = true;
     if (this.runup) {
-      if (out >= jumpMax) this.runup = false;
-      else return -toward;                                   // alejarse para coger carrerilla
+      const side = (sx - pl.x) < (pl.x + pl.w - sx) ? -1 : 1;        // borde más cercano
+      const clear = side < 0 ? pl.x - (self.x + self.w) : self.x - (pl.x + pl.w);
+      if (clear < 70 && this.roomTo(s, side) > 10) return side;     // alejarse un poco más
+      this.runup = false;
     }
-    const fastEnough = Math.sign(self.vx) === toward && Math.abs(self.vx) > 250;
-    if (out <= jumpMax && fastEnough) this.jump();
     return toward;
+  }
+
+  // Espacio libre hasta el borde de la pantalla en una dirección
+  roomTo(s, dir) {
+    return dir < 0 ? s.self.x - s.bounds.left : s.bounds.right - (s.self.x + s.self.w);
   }
 
   // ---------- reflejos ----------

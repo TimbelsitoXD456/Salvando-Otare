@@ -942,7 +942,8 @@ function physicsUpdate(dt) {
       self: p, partner: players.find(o => o !== p && o.alive) || null,
       enemies, enemyBullets, platforms, foods, meleeRange: MELEE.range,
       viewLeft: world.cameraX + 12, viewRight: world.cameraX + W - 12,
-      mapWidth: world.mapWidth
+      mapWidth: world.mapWidth, gravity: world.gravity,
+      helper, heartOrbs                     // BonkChanti y sus corazones (para saber cuándo acercarse)
     });
 
     // inputs horizontal - movement
