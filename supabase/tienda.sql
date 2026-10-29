@@ -33,6 +33,7 @@ as $$
     when 'coinsx2'  then 675   -- X2 Monedas
     when 'bonkchanti' then 1250 -- ayudante BonkChanti
     when 'otarin'   then 1850  -- ayudante Otarin
+    when 'guille'   then 2500  -- ayudante Guille
   end;
 $$;
 

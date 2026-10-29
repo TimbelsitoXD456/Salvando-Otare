@@ -16,6 +16,9 @@ export const MISSIONS = [
   { id: 'jhoab260',  name: 'Tiro Fijo-xi',               desc: 'Mata 260 enemigos con Jhoabxi.',                 kind: 'jhoabxi',   goal: 260,  reward: 400 },
   { id: 'jhoab1000', name: 'Maestro de la Puntería',     desc: 'Mata 1000 enemigos con Jhoabxi.',                kind: 'jhoabxi',   goal: 1000, reward: 1399 },
   { id: 'jhoab2000', name: 'Balas Eternas',              desc: 'Mata 2000 enemigos con Jhoabxi.',                kind: 'jhoabxi',   goal: 2000, reward: 2345 },
+  { id: 'guille260',  name: 'Corto Circuito',           desc: 'Mata 260 enemigos con Guille.',                  kind: 'guille',    goal: 260,  reward: 450 },
+  { id: 'guille1000', name: 'Tormenta en la Sala',      desc: 'Mata 1000 enemigos con Guille.',                 kind: 'guille',    goal: 1000, reward: 1200 },
+  { id: 'guille2000', name: 'Leyenda Voltica',          desc: 'Mata 2000 enemigos con Guille.',                 kind: 'guille',    goal: 2000, reward: 2500 },
   { id: 'ganador',   name: 'GANADOR!!!',                 desc: 'Completa en modo normal y vence al jefe final.', kind: 'wins',      goal: 1,    reward: 600 },
   { id: 'superv21',  name: 'Ganador Otra Vez?',          desc: 'Llega a la ronda 21 en el modo supervivencia.',  kind: 'survival',  goal: 21,   reward: 601 },
   { id: 'superv60',  name: 'CUANDO ACABA!?',             desc: 'Llega a la ronda 60 en el modo supervivencia.',  kind: 'survival',  goal: 60,   reward: 1050 },
@@ -23,6 +26,7 @@ export const MISSIONS = [
   { id: 'comprador', name: 'Comprador',                  desc: 'Compra un objeto en la tienda.',                 kind: 'items',     goal: 1,    reward: 300 },
   { id: 'acurar',    name: 'A Curar',                    desc: 'Compra a BonkChanti.',                           kind: 'bonkchanti', goal: 1,   reward: 490 },
   { id: 'hacefrio',  name: 'Hace Frio en la Cima',       desc: 'Compra a Otarin.',                               kind: 'otarin',     goal: 1,   reward: 700 },
+  { id: 'meteorito', name: 'A Oliver le Callo un Meteorito', desc: 'Compra a Guille.',                         kind: 'guillebuy',  goal: 1,   reward: 1111 },
   { id: 'loteria',   name: 'LOTERIA',                    desc: 'Compra TODA LA TIENDA.',                         kind: 'items',     goal: Object.keys(ITEMS).length, reward: 2000 }
 ];
 
@@ -33,11 +37,13 @@ function current(kind) {
     case 'round': return getBestRound();
     case 'lanzziano': return getKills().Lanzziano || 0;
     case 'jhoabxi': return getKills().Jhoabxi || 0;
+    case 'guille': return getKills().Guille || 0;
     case 'wins': return getWins();
     case 'survival': return getBestSurvival();
     case 'items': return Object.keys(getItems()).length;
     case 'bonkchanti': return 'bonkchanti' in getItems() ? 1 : 0;
     case 'otarin': return 'otarin' in getItems() ? 1 : 0;
+    case 'guillebuy': return 'guille' in getItems() ? 1 : 0;
     default: return 0;
   }
 }

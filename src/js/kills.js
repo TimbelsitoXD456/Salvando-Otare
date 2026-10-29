@@ -3,7 +3,7 @@
 // con Supabase: cada cambio avisa con el evento 'progressChanged'.
 const STORAGE_KEY = 'salvandoOtare.kills';
 const BEST_ROUND_KEY = 'salvandoOtare.bestRound';
-export const PLAYERS = ['Lanzziano', 'Jhoabxi'];
+export const PLAYERS = ['Lanzziano', 'Jhoabxi', 'Guille'];   // Guille: el ayudante de la tienda (sus misiones)
 
 function changed() {
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('progressChanged'));
@@ -49,6 +49,7 @@ export function replaceBestRound(round) {
 // ---------- modo SUPERVIVENCIA y victorias (para las misiones) ----------
 const BEST_SURVIVAL_KEY = 'salvandoOtare.bestSurvival';  // ronda más alta en supervivencia
 const WINS_KEY = 'salvandoOtare.wins';                   // veces que se venció al jefe en modo normal
+const HARD_WINS_KEY = 'salvandoOtare.hardWins';          // ...de ellas, en dificultad DIFÍCIL
 
 const readInt = key => { try { return Math.max(0, Math.floor(Number(localStorage.getItem(key)) || 0)); } catch (e) { return 0; } };
 const writeInt = (key, n) => { try { localStorage.setItem(key, String(Math.max(0, Math.floor(Number(n) || 0)))); } catch (e) {} };
@@ -65,5 +66,9 @@ export const getWins = () => readInt(WINS_KEY);
 export function addWin() { writeInt(WINS_KEY, getWins() + 1); changed(); }
 export const replaceWins = n => writeInt(WINS_KEY, n);
 
-// Supervivencia: se desbloquea al vencer al jefe del modo normal
-export const survivalUnlocked = () => getWins() > 0;
+export const getHardWins = () => readInt(HARD_WINS_KEY);
+export function addHardWin() { writeInt(HARD_WINS_KEY, getHardWins() + 1); changed(); }
+export const replaceHardWins = n => writeInt(HARD_WINS_KEY, n);
+
+// Supervivencia: se desbloquea al vencer al jefe en DIFÍCIL (quien ya la había jugado la conserva)
+export const survivalUnlocked = () => getHardWins() > 0 || getBestSurvival() > 0;

@@ -11,12 +11,13 @@
 alter table public.progress add column if not exists best_survival int   not null default 0;  -- ronda más alta en supervivencia
 alter table public.progress add column if not exists wins          int   not null default 0;  -- veces que venció al jefe (modo normal)
 alter table public.progress add column if not exists missions      jsonb not null default '{}'::jsonb; -- {"lanz40": "fecha"} = cobrada
+alter table public.progress add column if not exists hard_wins     int   not null default 0;  -- victorias en DIFÍCIL (desbloquean supervivencia)
 
 -- El juego puede escribir directamente estas columnas (como antes, más best_survival y wins);
 -- capocoins, items y missions solo cambian con las funciones del servidor.
 revoke insert, update on public.progress from anon, authenticated;
-grant insert (user_id, kills, best_round, trained_ai, updated_at, best_survival, wins) on public.progress to authenticated;
-grant update (user_id, kills, best_round, trained_ai, updated_at, best_survival, wins) on public.progress to authenticated;
+grant insert (user_id, kills, best_round, trained_ai, updated_at, best_survival, wins, hard_wins) on public.progress to authenticated;
+grant update (user_id, kills, best_round, trained_ai, updated_at, best_survival, wins, hard_wins) on public.progress to authenticated;
 
 -- Catálogo de misiones: qué se mide, cuánto hace falta y cuántas CapoCoins da
 create or replace function public.mission_info(mid text, out kind text, out goal int, out reward int)
@@ -33,6 +34,9 @@ as $$
     ('jhoab260',  'jhoabxi',   260,  400),
     ('jhoab1000', 'jhoabxi',   1000, 1399),
     ('jhoab2000', 'jhoabxi',   2000, 2345),
+    ('guille260',  'guille',  260,  450),
+    ('guille1000', 'guille',  1000, 1200),
+    ('guille2000', 'guille',  2000, 2500),
     ('ganador',   'wins',      1,    600),
     ('superv21',  'survival',  21,   601),
     ('superv60',  'survival',  60,   1050),
@@ -40,7 +44,8 @@ as $$
     ('comprador', 'items',     1,    300),
     ('acurar',    'bonkchanti', 1,   490),
     ('hacefrio',  'otarin',    1,    700),
-    ('loteria',   'items',     7,    2000)
+    ('meteorito', 'guillebuy', 1,    1111),
+    ('loteria',   'items',     8,    2000)
   ) as m(id, kind, goal, reward)
   where m.id = mid;
 $$;
@@ -72,6 +77,8 @@ begin
     when 'items'     then (select count(*) from jsonb_object_keys(pr.items))
     when 'bonkchanti' then case when pr.items ? 'bonkchanti' then 1 else 0 end
     when 'otarin'     then case when pr.items ? 'otarin' then 1 else 0 end
+    when 'guillebuy'  then case when pr.items ? 'guille' then 1 else 0 end
+    when 'guille'    then case when jsonb_typeof(pr.kills->'Guille') = 'number' then floor((pr.kills->>'Guille')::numeric) else 0 end
     when 'lanzziano' then case when jsonb_typeof(pr.kills->'Lanzziano') = 'number' then floor((pr.kills->>'Lanzziano')::numeric) else 0 end
     when 'jhoabxi'   then case when jsonb_typeof(pr.kills->'Jhoabxi')   = 'number' then floor((pr.kills->>'Jhoabxi')::numeric)   else 0 end
     else 0 end;

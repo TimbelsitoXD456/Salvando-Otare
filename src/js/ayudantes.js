@@ -5,6 +5,7 @@
 //   pantalón corto morado y zapatillas amarillas y rojas). Va flotando junto al jugador más herido
 //   y le lanza corazones que curan.
 //   Otarin: cubito de hielo volador; dispara bolas de hielo que congelan a los enemigos.
+//   Guille: piloto de carreras; tira meteoritos y tijeras que vuelven como un boomerang.
 import { grid, compose, outline, toCanvas, blit } from './spriteEngine.js';
 
 const PALETTE = {
@@ -204,5 +205,118 @@ export function drawFrozen(ctx, e, time) {
   ctx.fillRect(Math.round(e.x + 4), Math.round(e.y + 4), 2, 8);
   ctx.globalAlpha = 1 - tw;
   ctx.fillRect(Math.round(e.x + e.w - 6), Math.round(e.y + e.h * 0.3), 2, 2);
+  ctx.restore();
+}
+
+// ---------- GUILLE: piloto con casco y mono de carreras; tira meteoritos y tijeras boomerang ----------
+// Como en el diseño: casco verde lima con franja oscura y visera azul, mono rojo con parches blancos,
+// bandera azul y blanca, cinturón negro y "SENNA" en amarillo. Lleva una Bloxy Cola en el hombro.
+const GUI_PAL = {
+  G: '#b8e01a', g: '#87a812', k: '#1d1f2a', v: '#2346c8', V: '#7fd0ff', r: '#e0261e', R: '#9e1610',
+  w: '#ffffff', x: '#cfcfd6', b: '#2d5bd8', y: '#ffd23a', n: '#4a2a12', l: '#e8323c', o: '#1d1f2a'
+};
+const GUI = [
+  '.....GGGGGG.....',
+  '....GGkkkkGG....',
+  '...GGGGkkkkGG.n.',
+  '...GGGGGGkkGG.n.',
+  '...vvvvvvvvvGnnn',
+  '...vVVVVVVvvGlll',
+  '...GGGGGGGGGGnnn',
+  '....GgggggggGnnn',
+  '..rrrrrrrrrrrr..',
+  '..rrwwwrwwwwrr..',
+  '..rrrrrrwllwrr..',
+  '..rrwwwrwwwwrr..',
+  '..rrrwwwwwwrrr..',
+  '..rrrrbbwwrrrr..',
+  '..rrrrbbwwrrrr..',
+  '..kkrrrrrrrrkk..',
+  '..RRryyyyyrrRR..',
+  '....kkkkkkkk....',
+  '....rrrrrrrr....',
+  '....rrrrrrrr....',
+  '....rrr..rrr....',
+  '....RRR..RRR....'
+];
+let guiImg = null;
+function guilleImage() {
+  if (guiImg) return guiImg;
+  const c = document.createElement('canvas');
+  c.width = GUI[0].length + 2; c.height = GUI.length + 2;
+  const g = c.getContext('2d');
+  // contorno oscuro de 1 px y encima el dibujo
+  g.fillStyle = '#120e1c';
+  GUI.forEach((row, y) => [...row].forEach((ch, x) => { if (ch !== '.') g.fillRect(x, y, 3, 3); }));
+  GUI.forEach((row, y) => [...row].forEach((ch, x) => { if (ch !== '.') { g.fillStyle = GUI_PAL[ch]; g.fillRect(x + 1, y + 1, 1, 1); } }));
+  return (guiImg = c);
+}
+
+// g: { x, y (centro), facing, castT, throwT } · time: reloj de la partida
+export function drawGuille(ctx, g, time) {
+  const bob = Math.sin(time * 2.9 + 2) * 4;
+  const S = 2, img = guilleImage(), w = img.width * S, h = img.height * S;
+  const x = Math.round(g.x - w / 2), y = Math.round(g.y - h / 2 + bob);
+  ctx.save();
+  // brillo rojo alrededor (más fuerte al lanzar)
+  const casting = time - Math.max(g.castT ?? -9, g.throwT ?? -9) < 0.3;
+  ctx.shadowColor = '#ff3b2e'; ctx.shadowBlur = casting ? 20 : 8;
+  ctx.imageSmoothingEnabled = false;
+  if (g.facing < 0) { ctx.translate(x + w, y); ctx.scale(-1, 1); ctx.drawImage(img, 0, 0, w, h); }
+  else ctx.drawImage(img, x, y, w, h);
+  ctx.restore();
+  ctx.font = '8px "Press Start 2P", monospace';
+  const label = 'Guille', lx = Math.round(g.x - ctx.measureText(label).width / 2), ly = y - 6;
+  ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(12,10,24,0.9)';
+  ctx.strokeText(label, lx, ly);
+  ctx.fillStyle = '#ff8a7a'; ctx.fillText(label, lx, ly);
+}
+
+// Tijeras boomerang girando: dos hojas plateadas con mangos rojos
+export function drawScissors(ctx, s) {
+  ctx.save();
+  ctx.translate(Math.round(s.x), Math.round(s.y));
+  ctx.rotate(s.spin);
+  ctx.scale(1.4, 1.4);
+  ctx.shadowColor = '#ff3b2e'; ctx.shadowBlur = 10;
+  for (const side of [1, -1]) {
+    ctx.save();
+    ctx.rotate(side * 0.35);
+    ctx.fillStyle = '#e8eef5';                       // hoja
+    ctx.beginPath(); ctx.moveTo(0, -2); ctx.lineTo(16, 0); ctx.lineTo(0, 2); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#e0261e'; ctx.lineWidth = 2.5;  // mango
+    ctx.beginPath(); ctx.arc(-7, 0, 4.5, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#1d1f2a'; ctx.fillRect(-1, -1, 2, 2);   // tornillo
+  ctx.restore();
+}
+
+// Meteorito: primero la sombra que avisa dónde cae y la bola de fuego bajando; luego la explosión (boom)
+export function drawMeteor(ctx, m, G, boom = false) {
+  ctx.save();
+  if (boom) {
+    const k = 1 - m.t / 0.4;                          // 0 → 1 mientras dura
+    ctx.globalAlpha = 1 - k;
+    ctx.fillStyle = '#ffb02e';
+    ctx.beginPath(); ctx.arc(m.x, m.y, G.meteorRadius * (0.5 + 0.6 * k), 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#ff3b2e'; ctx.lineWidth = 4; ctx.stroke();
+    ctx.restore();
+    return;
+  }
+  const k = 1 - m.t / G.meteorWarn;                    // 0 → 1 hasta que cae
+  ctx.globalAlpha = 0.25 + 0.35 * k;
+  ctx.fillStyle = '#ff3b2e';
+  ctx.beginPath(); ctx.ellipse(m.x, m.y + 18, G.meteorRadius * (0.6 + 0.4 * k), 10, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  const fy = m.y - 520 * (1 - k), fx = m.x + 140 * (1 - k);   // baja en diagonal
+  ctx.strokeStyle = 'rgba(255,140,40,0.6)'; ctx.lineWidth = 8;
+  ctx.beginPath(); ctx.moveTo(fx + 40, fy - 150); ctx.lineTo(fx, fy); ctx.stroke();
+  ctx.shadowColor = '#ff3b2e'; ctx.shadowBlur = 20;
+  const gr = ctx.createRadialGradient(fx, fy, 2, fx, fy, 16);
+  gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.4, '#ffb02e'); gr.addColorStop(1, '#e0261e');
+  ctx.fillStyle = gr;
+  ctx.beginPath(); ctx.arc(fx, fy, 16, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }

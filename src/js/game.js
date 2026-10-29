@@ -1,13 +1,13 @@
 import { isDown, wasPressed, resetInput } from './engine/input.js';
 import { createLoop } from './engine/loop.js';
-import { addKill, recordRound, recordSurvivalRound, addWin } from './kills.js';
+import { addKill, recordRound, recordSurvivalRound, addWin, addHardWin } from './kills.js';
 import { coinValue, earnCoins, getCoins } from './tienda.js';
 import { createAI } from './ai.js';
 import { FOOD_TYPES, FOOD_LIFETIME, FOOD_SPAWN_FIRST, FOOD_SPAWN_INTERVAL, FOOD_MAX_ON_MAP, FOOD_SIZE,
   randomFoodKind, drawFood, drawFloatText } from './food.js';
 import { drawPlayer } from './playerSprites.js';
 import { drawEnemy, drawPill, drawEnergyBall, HAS_SPRITE } from './enemySprites.js';
-import { drawBonkChanti, drawHeartOrb, drawOtarin, drawIceShot, drawFrozen } from './ayudantes.js';
+import { drawBonkChanti, drawHeartOrb, drawOtarin, drawIceShot, drawFrozen, drawGuille, drawScissors, drawMeteor } from './ayudantes.js';
 import { drawBackdrop, drawGround, drawPlatform } from './mapa.js';
 
 let canvas, ctx, loopHandle, resizeObserver;
@@ -24,6 +24,10 @@ let helper = null;     // ayudante BonkChanti (objeto de la TIENDA), o null
 let heartOrbs = [];    // corazones curativos que lanza BonkChanti
 let otarin = null;     // ayudante Otarin (objeto de la TIENDA), o null
 let iceShots = [];     // bolas de hielo de Otarin
+let guille = null;     // ayudante Guille (objeto de la TIENDA), o null
+let scissors = null;   // sus tijeras boomerang (solo unas a la vez)
+let meteors = [];      // meteoritos avisados que van a caer
+let booms = [];        // explosiones de meteorito (solo dibujo)
 let world = { 
   gravity: 1800, 
   groundOffset: 80,
@@ -42,6 +46,15 @@ let introHold = false; // congelado durante la cuenta atrás 3, 2, 1, PELIEN (se
 let boosts = {};       // objetos de la TIENDA activos en esta partida: { speed, strength, health } (tienda.js)
 let runCoins = 0;      // CapoCoins ganadas en esta partida
 let survival = false;  // modo SUPERVIVENCIA: rondas infinitas, un jefe cada 20 (no se gana: se aguanta)
+// DIFICULTAD (se elige en JUGAR): multiplica la vida de los enemigos, su daño y la vida del jefe.
+// MEDIO es el juego de siempre; vencer al jefe en DIFÍCIL desbloquea SUPERVIVENCIA (kills.js)
+export const DIFFICULTIES = {
+  easy:   { label: 'FÁCIL',   hp: 0.85, dmg: 0.8,  boss: 0.85 },
+  normal: { label: 'MEDIO',   hp: 1,    dmg: 1,    boss: 1 },
+  hard:   { label: 'DIFÍCIL', hp: 1.15, dmg: 1.2,  boss: 1.1 }
+};
+let difficulty = 'normal';
+const diff = () => DIFFICULTIES[difficulty] || DIFFICULTIES.normal;
 let onResizeCallback = null;
 let lastGroundY = null; // altura del suelo en el último resize (null = partida sin crear)
 
@@ -105,7 +118,7 @@ const ENEMY_DMG_PER_ROUND = 0.02; // fracción de daño extra por ronda (0.03 = 
 function makeEnemy(kind, x, y, round = 1, opts = {}) {
   const tpl = ENEMY_TYPES[kind] || ENEMY_TYPES.melle;
   // cada ronda los enemigos tienen más vida (ENEMY_HP_PER_ROUND) y pegan un poco más fuerte (ENEMY_DMG_PER_ROUND)
-  const hp = Math.round((tpl.baseHp || 30) + Math.max(0, round - 1) * (opts.bossMinion ? 6 : ENEMY_HP_PER_ROUND) + Math.random() * 12);   // (los esbirros del jefe, como antes)
+  const hp = Math.round(((tpl.baseHp || 30) + Math.max(0, round - 1) * (opts.bossMinion ? 6 : ENEMY_HP_PER_ROUND) + Math.random() * 12) * (kind === 'boss' ? 1 : diff().hp));   // (los esbirros del jefe, como antes)
   // (la velocidad deja de subir en la ronda 30: en supervivencia serían imposibles de esquivar)
   const speed = (tpl.baseSpeed || 60) + Math.round((Math.min(round, 30) - 1) * 4);
   const display = opts.displayName || tpl.display;
@@ -136,7 +149,7 @@ function makeEnemy(kind, x, y, round = 1, opts = {}) {
     attackRange: tpl.attackRange || 50,
     attackDamage: tpl.attackDamage || 10,
     // daño extra por ronda (deja de subir en la 30); el jefe y sus esbirros no: su dificultad va aparte (BOSS_RAGE)
-    dmgMul: kind === 'boss' || opts.bossMinion ? 1 : 1 + (Math.min(round, 30) - 1) * ENEMY_DMG_PER_ROUND,
+    dmgMul: (kind === 'boss' || opts.bossMinion ? 1 : 1 + (Math.min(round, 30) - 1) * ENEMY_DMG_PER_ROUND) * diff().dmg,
     shootTimer: getInitialTimer(),
     tpl,
     isMinion: !!opts.isMinion,
@@ -278,7 +291,7 @@ function spawnBoss(canvasW, canvasH) {
   const boss = makeEnemy('boss', bossX, baseY, currentRound);
   boss.y = canvasH - world.groundOffset - boss.h; // apoyado en el suelo según su altura
   // en supervivencia cada jefe es más duro: 3600 de vida en la 20, 7200 en la 40, 10800 en la 60...
-  const bossHp = ENEMY_TYPES.boss.baseHp;
+  const bossHp = Math.round(ENEMY_TYPES.boss.baseHp * diff().boss);
   boss.hp = boss.maxHp = survival ? bossHp * Math.max(1, Math.floor(currentRound / maxRounds)) : bossHp;
   boss.shootTimer = ENEMY_TYPES.boss.summonCd || ENEMY_TYPES.boss.summonCd === 0 ? ENEMY_TYPES.boss.summonCd : 8;
   enemies.push(boss);
@@ -342,6 +355,9 @@ function setupPlayers(canvasW, canvasH) {
   // ayudante Otarin: aparece junto a Jhoabxi
   otarin = boosts.otarin ? { x: players[1].x + 40, y: players[1].y - 40, facing: 1, cooldown: OTARIN.firstShot, shootT: null } : null;
   iceShots = [];
+  // ayudante Guille: aparece encima de los dos
+  guille = boosts.guille ? { x: players[0].x + 60, y: players[0].y - 60, facing: 1, meteorCd: GUILLE.firstMeteor, scissorsCd: GUILLE.firstScissors, castT: null, throwT: null } : null;
+  scissors = null; meteors = []; booms = [];
   runCoins = 0;
   simStats = newSimStats();
   bullets = []; enemyBullets = []; enemies = [];
@@ -429,7 +445,7 @@ function anyPlayerAlive() { return players.some(p => p.alive && p.hp > 0); }
 function newSimStats() {
   return {
     time: 0, kills: [0, 0], damage: [{ melle: 0, bala: 0, pinchos: 0 }, { melle: 0, bala: 0, pinchos: 0 }],
-    healed: [0, 0], food: { spawned: 0, eaten: 0, expired: 0 }, freezes: 0
+    healed: [0, 0], food: { spawned: 0, eaten: 0, expired: 0 }, freezes: 0, guilleKills: 0
   };
 }
 // ARMADURA (objeto de la TIENDA): los golpes y disparos enemigos hacen menos daño (los pinchos no)
@@ -467,11 +483,13 @@ function resizeCanvasInternal() {
 }
 
 function shiftWorldY(dy) {
-  for (const list of [players, enemies, bullets, enemyBullets, platforms, foods, floatTexts, heartOrbs, iceShots]) {
+  for (const list of [players, enemies, bullets, enemyBullets, platforms, foods, floatTexts, heartOrbs, iceShots, meteors, booms]) {
     for (const o of list) o.y += dy;
   }
   if (helper) helper.y += dy;
   if (otarin) otarin.y += dy;
+  if (guille) guille.y += dy;
+  if (scissors) scissors.y += dy;
 }
 
 // Jefe: fase de furia al llegar a esta fracción de vida
@@ -684,9 +702,10 @@ function killEnemy(e) {
   if (!e.alive) return;
   e.alive = false;
   playSfx('enemyDie');
-  const killer = players[e.lastHitBy];
+  const byGuille = e.lastHitBy === GUILLE_ID;   // las de Guille cuentan para él (misiones de Guille)
+  const killer = byGuille ? { name: 'Guille' } : players[e.lastHitBy];
   if (!killer) return;
-  if (simulationMode) { simStats.kills[e.lastHitBy]++; return; } // las kills de la IA no cuentan ni dan monedas
+  if (simulationMode) { if (byGuille) simStats.guilleKills++; else simStats.kills[e.lastHitBy]++; return; } // las kills de la IA no cuentan ni dan monedas
   addKill(killer.name);
   // CapoCoins: 1 por enemigo, 2 por Tigre/Fuerte, 100 por el jefe (el doble con X2 Monedas)
   const coins = coinValue(e.kind) * (boosts.coinsx2 ? 2 : 1);   // X2 MONEDAS de la tienda
@@ -910,6 +929,138 @@ function updateOtarin(dt, W) {
       playSfx('freeze');
       simStats.freezes++;
       iceShots.splice(i, 1);
+    }
+  }
+}
+
+// --- Ayudante Guille (dibujo en ayudantes.js) ---
+// En el primer Salvando Otare tiraba un meteorito cada 1.5 s (50 de daño en 120 px) y unas tijeras
+// cada segundo que iban en línea recta: arrasaba rondas enteras. Aquí lanza menos y avisa dónde cae
+// el meteorito, y las tijeras son un BOOMERANG: las tira hacia el enemigo con el que más enemigos
+// atraviesa y vuelven a sus manos (pegan a la ida y a la vuelta). El jefe es inmune (sus secuaces no).
+const GUILLE_ID = 2;   // e.lastHitBy de lo que mata Guille (0 y 1 son los jugadores)
+const GUILLE = {
+  speed: 320,          // vuela (px/s)
+  range: 420,          // solo ataca a enemigos a esta distancia de algún jugador
+  meteorCd: 5.5,       // segundos entre meteoritos
+  firstMeteor: 3.0,
+  meteorWarn: 0.9,     // la sombra avisa en el suelo antes de que caiga
+  meteorDmg: 35,
+  meteorRadius: 80,
+  scissorsCd: 2.6,     // segundos entre lanzamientos (cuando las tijeras ya volvieron)
+  firstScissors: 1.0,
+  scissorsSpeed: 520,
+  scissorsReach: 330,  // hasta dónde llegan antes de volver
+  scissorsDmg: 14,     // por pasada (ida y vuelta)
+  scissorsHitR: 22
+};
+
+// Daño de Guille: la kill (y sus CapoCoins) son de Guille
+function guilleHit(e, dmg) {
+  if (e.kind === 'boss') return;   // el jefe es inmune a Guille
+  e.hp -= dmg;
+  e.lastHitBy = GUILLE_ID;
+  e.flash = 0.12;
+  playSfx('hit');
+  if (e.hp <= 0) killEnemy(e);
+}
+const enemyCenter = e => ({ x: e.x + e.w / 2, y: e.y + e.h / 2 });
+// distancia de un punto al segmento a-b
+function distToSegment(px, py, ax, ay, bx, by) {
+  const vx = bx - ax, vy = by - ay, len2 = vx * vx + vy * vy || 1;
+  const t = Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / len2));
+  return Math.hypot(px - ax - vx * t, py - ay - vy * t);
+}
+// valor de golpear a un enemigo: más si el golpe lo mata (o casi)
+const hitValue = (e, dmg) => 1 + (e.hp <= dmg ? 1.5 : e.hp <= dmg * 2 ? 0.5 : 0);
+
+function updateGuille(dt, W) {
+  if (!guille) return;
+  const alive = players.filter(p => p.alive);
+  if (!alive.length) return;
+  const nearPlayers = e => { const c = enemyCenter(e); return alive.some(p => Math.hypot(p.x + p.w / 2 - c.x, p.y + p.h / 2 - c.y) <= GUILLE.range); };
+  const targets = enemies.filter(e => e.alive && e.kind !== 'boss' && nearPlayers(e));
+
+  // flota detrás de los jugadores, por encima, sin salirse de la pantalla
+  const midX = alive.reduce((a, p) => a + p.x + p.w / 2, 0) / alive.length;
+  const front = targets.length ? Math.sign(targets.reduce((a, e) => a + enemyCenter(e).x, 0) / targets.length - midX) || 1 : guille.facing;
+  const wantX = Math.max(world.cameraX + 30, Math.min(world.cameraX + W - 30, midX - front * 50));
+  const wantY = Math.min(...alive.map(p => p.y)) - 60;
+  const dx = wantX - guille.x, dy = wantY - guille.y, d = Math.hypot(dx, dy);
+  if (d > 1) { const step = Math.min(d, GUILLE.speed * dt); guille.x += dx / d * step; guille.y += dy / d * step; }
+  guille.facing = front;
+
+  // METEORITO: donde más enemigos pille (centrado en uno de ellos)
+  guille.meteorCd -= dt;
+  if (guille.meteorCd <= 0 && targets.length) {
+    let best = null, bestScore = 0;
+    for (const e of targets) {
+      const c = enemyCenter(e);
+      let s = 0;
+      for (const o of targets) { const oc = enemyCenter(o); if (Math.abs(oc.x - c.x) <= GUILLE.meteorRadius && Math.abs(oc.y - c.y) <= GUILLE.meteorRadius) s += hitValue(o, GUILLE.meteorDmg); }
+      if (s > bestScore) { bestScore = s; best = c; }
+    }
+    if (best) {
+      meteors.push({ x: best.x, y: best.y, t: GUILLE.meteorWarn });
+      guille.meteorCd = GUILLE.meteorCd;
+      guille.castT = gameTime;
+    }
+  }
+  for (let i = meteors.length - 1; i >= 0; i--) {
+    const m = meteors[i];
+    m.t -= dt;
+    if (m.t > 0) continue;
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      const c = enemyCenter(e);
+      if (Math.abs(c.x - m.x) <= GUILLE.meteorRadius && Math.abs(c.y - m.y) <= GUILLE.meteorRadius) guilleHit(e, GUILLE.meteorDmg);
+    }
+    booms.push({ x: m.x, y: m.y, t: 0.4 });
+    playSfx('meteor');
+    meteors.splice(i, 1);
+  }
+  for (let i = booms.length - 1; i >= 0; i--) if ((booms[i].t -= dt) <= 0) booms.splice(i, 1);
+
+  // TIJERAS BOOMERANG: hacia el enemigo con el que la ida y la vuelta atraviesan más enemigos
+  if (!scissors) {
+    guille.scissorsCd -= dt;
+    if (guille.scissorsCd <= 0 && targets.length) {
+      let best = null, bestScore = 0;
+      for (const e of targets) {
+        const c = enemyCenter(e), ddx = c.x - guille.x, ddy = c.y - guille.y, dd = Math.hypot(ddx, ddy) || 1;
+        if (dd > GUILLE.scissorsReach + 40) continue;
+        const ex = guille.x + ddx / dd * GUILLE.scissorsReach, ey = guille.y + ddy / dd * GUILLE.scissorsReach;
+        let s = 0;
+        for (const o of targets) { const oc = enemyCenter(o); if (distToSegment(oc.x, oc.y, guille.x, guille.y, ex, ey) <= GUILLE.scissorsHitR + o.w / 2) s += hitValue(o, GUILLE.scissorsDmg * 2); }
+        if (s > bestScore) { bestScore = s; best = { dx: ddx / dd, dy: ddy / dd }; }
+      }
+      if (best) {
+        scissors = { x: guille.x, y: guille.y, vx: best.dx * GUILLE.scissorsSpeed, vy: best.dy * GUILLE.scissorsSpeed, out: GUILLE.scissorsReach, back: false, hit: new Set(), spin: 0 };
+        guille.throwT = gameTime;
+        playSfx('scissors');
+      }
+    }
+  } else {
+    const s = scissors;
+    s.spin += dt * 18;
+    if (!s.back) {
+      s.x += s.vx * dt; s.y += s.vy * dt;
+      s.out -= GUILLE.scissorsSpeed * dt;
+      if (s.out <= 0) { s.back = true; s.hit = new Set(); }   // a la vuelta puede volver a pegar a los mismos
+    } else {
+      // vuelve a las manos de Guille (aunque se haya movido)
+      const bx = guille.x - s.x, by = guille.y - s.y, bd = Math.hypot(bx, by) || 1;
+      const step = GUILLE.scissorsSpeed * 1.1 * dt;
+      if (bd <= step + 6) { scissors = null; guille.scissorsCd = GUILLE.scissorsCd; return; }
+      s.x += bx / bd * step; s.y += by / bd * step;
+    }
+    for (const e of enemies) {
+      if (!e.alive || s.hit.has(e)) continue;
+      const c = enemyCenter(e);
+      if (Math.abs(c.x - s.x) <= GUILLE.scissorsHitR + e.w / 2 && Math.abs(c.y - s.y) <= GUILLE.scissorsHitR + e.h / 2) {
+        s.hit.add(e);
+        guilleHit(e, GUILLE.scissorsDmg);
+      }
     }
   }
 }
@@ -1186,7 +1337,7 @@ function physicsUpdate(dt) {
     }
   }); // end players.forEach
 
-  if (!gameOver) { updateFoods(dt); updateHelper(dt, W); updateOtarin(dt, W); }
+  if (!gameOver) { updateFoods(dt); updateHelper(dt, W); updateOtarin(dt, W); updateGuille(dt, W); }
   updateCamera(W);
 
   // advance rounds when enemies dead
@@ -1246,9 +1397,9 @@ function saveBestRound() {
   if (survival) recordSurvivalRound(currentRound);
   else {
     recordRound(currentRound);
-    if (gameOverType === 'victory') addWin();
+    if (gameOverType === 'victory') { addWin(); if (difficulty === 'hard') addHardWin(); }
   }
-  window.dispatchEvent(new CustomEvent('runFinished', { detail: { survival, round: currentRound, result: gameOverType } }));
+  window.dispatchEvent(new CustomEvent('runFinished', { detail: { survival, difficulty, round: currentRound, result: gameOverType } }));
 }
 
 // render function
@@ -1378,6 +1529,11 @@ function render() {
   // ayudante Otarin y sus bolas de hielo
   if (otarin) drawOtarin(ctx, otarin, gameTime);
   iceShots.forEach(s => drawIceShot(ctx, s, gameTime));
+  // ayudante Guille, sus meteoritos y sus tijeras
+  meteors.forEach(m => drawMeteor(ctx, m, GUILLE));
+  booms.forEach(b => drawMeteor(ctx, b, GUILLE, true));
+  if (guille) drawGuille(ctx, guille, gameTime);
+  if (scissors) drawScissors(ctx, scissors);
 
   floatTexts.forEach(t => drawFloatText(ctx, t));
 
@@ -1408,7 +1564,7 @@ function render() {
     ctx.fillStyle = '#ffd24a'; ctx.font = '12px "Press Start 2P", monospace';
     outlinedText(ctx, `${getCoins()}`, hudX + 24, cy + 12);
     if (runCoins > 0) { ctx.fillStyle = '#fff3b0'; ctx.font = '9px "Press Start 2P", monospace'; outlinedText(ctx, `+${runCoins} esta partida`, hudX + 110, cy + 11); }
-    const active = [['speed', 'x2 VEL'], ['strength', 'x2 FUE'], ['health', 'x2 VIDA'], ['armor', 'ARMADURA'], ['coinsx2', 'x2 MONEDAS'], ['bonkchanti', 'BONKCHANTI'], ['otarin', 'OTARIN']].filter(([k]) => boosts[k]).map(([, t]) => t);
+    const active = [['speed', 'x2 VEL'], ['strength', 'x2 FUE'], ['health', 'x2 VIDA'], ['armor', 'ARMADURA'], ['coinsx2', 'x2 MONEDAS'], ['bonkchanti', 'BONKCHANTI'], ['otarin', 'OTARIN'], ['guille', 'GUILLE']].filter(([k]) => boosts[k]).map(([, t]) => t);
     if (active.length) { ctx.fillStyle = '#ff6bec'; ctx.font = '8px "Press Start 2P", monospace'; outlinedText(ctx, active.join('  '), hudX, cy + 30); }
   }
 
@@ -1419,7 +1575,7 @@ function render() {
   const px = W - panelW - 18, py = 18;
   ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(px, py, panelW, panelH);
   ctx.fillStyle = '#cfe'; ctx.font = `${small ? 9 : 12}px "Press Start 2P", monospace`;
-  ctx.fillText(`Ronda: ${survival ? `${currentRound} · SUPERVIVENCIA` : `${currentRound}/${maxRounds}`}${simulationMode ? (aiParams ? '   [IA ENTRENADA' : '   [SIMULACIÓN IA') + (startRound > 1 ? ` · desde ${startRound}]` : ']') : ''}`, px + 12, py + 18);
+  ctx.fillText(`Ronda: ${survival ? `${currentRound} · SUPERVIVENCIA` : `${currentRound}/${maxRounds}`}${difficulty !== 'normal' ? ` · ${diff().label}` : ''}${simulationMode ? (aiParams ? '   [IA ENTRENADA' : '   [SIMULACIÓN IA') + (startRound > 1 ? ` · desde ${startRound}]` : ']') : ''}`, px + 12, py + 18);
   ctx.font = `${small ? 7 : 10}px "Press Start 2P", monospace`;
   legend.forEach((line, i) => ctx.fillText(line, px + 12, py + (small ? 34 : 40) + i * (small ? 16 : 22)));
 
@@ -1532,10 +1688,11 @@ function update(dt) {
 // controls: ['keys'|'solo'|'touch'|'ai', ...] por jugador (controles.js); touch: entrada táctil (touch.js);
 // partnerAi: parámetros de la IA compañera (null = la original); survival: modo SUPERVIVENCIA
 export function start({ canvas: suppliedCanvas, onResize, simulation = false, aiParams: params = null, startRound: round = 1, hold = false, boosts: shopBoosts = null,
-  controls = null, touch = null, partnerAi = null, survival: survivalMode = false } = {}) {
+  controls = null, touch = null, partnerAi = null, survival: survivalMode = false, difficulty: level = 'normal' } = {}) {
   if (running || headlessBusy) return;
   running = true; paused = false; gameOver = false; gameOverType = ''; onResizeCallback = onResize || null;
   survival = !simulation && !!survivalMode;
+  difficulty = !simulation && DIFFICULTIES[level] ? level : 'normal';
   introHold = !!hold;
   simulationMode = !!simulation;
   boosts = { ...(shopBoosts || {}) };   // también en "Ver simulación": los objetos activos del admin
@@ -1580,7 +1737,7 @@ export function stop() {
   else window.removeEventListener('resize', resizeCanvasInternal);
   if (canvas) canvas.removeEventListener('click', handleGameOverClick);
   gameOver = false; gameOverType = ''; lastGroundY = null;
-  canvas = null; ctx = null; players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; helper = null; heartOrbs = []; otarin = null; iceShots = []; onResizeCallback = null; resetInput();
+  canvas = null; ctx = null; players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; helper = null; heartOrbs = []; otarin = null; iceShots = []; guille = null; scissors = null; meteors = []; booms = []; onResizeCallback = null; resetInput();
 }
 // --- Modo predicción ---
 // Corre una partida de simulación IA completa sin canvas ni requestAnimationFrame: física con dt fijo
@@ -1602,10 +1759,11 @@ function clampRound(r) { return Math.max(1, Math.min(maxRounds, Math.floor(r) ||
 
 // chunked = false: todo de un tirón (para Web Workers, donde no hay pestaña que congelar)
 // boosts: objetos de la TIENDA para medir su efecto ({ speed, strength, health }); por defecto ninguno
-export function runHeadless({ seed = 1, maxSeconds = 600, onProgress, isCancelled, aiParams: params = null, chunked = true, startRound: round = 1, boosts: simBoosts = null } = {}) {
+export function runHeadless({ seed = 1, maxSeconds = 600, onProgress, isCancelled, aiParams: params = null, chunked = true, startRound: round = 1, boosts: simBoosts = null, difficulty: level = 'normal' } = {}) {
   if (running || headlessBusy) return Promise.reject(new Error('Ya hay una partida en marcha.'));
   headlessBusy = true;
   survival = false;
+  difficulty = DIFFICULTIES[level] ? level : 'normal';
   aiParams = params;
   boosts = { ...(simBoosts || {}) };
   startRound = clampRound(round);
@@ -1643,11 +1801,12 @@ export function runHeadless({ seed = 1, maxSeconds = 600, onProgress, isCancelle
         healed: [...simStats.healed],
         food: { ...simStats.food },
         freezes: simStats.freezes,
+        guilleKills: simStats.guilleKills,
         modeFrames
       };
-      headlessView = null; headlessBusy = false; simulationMode = false; aiParams = null; boosts = {};
+      headlessView = null; headlessBusy = false; simulationMode = false; aiParams = null; boosts = {}; difficulty = 'normal';
       gameOver = false; gameOverType = '';
-      players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; helper = null; heartOrbs = []; otarin = null; iceShots = [];
+      players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; helper = null; heartOrbs = []; otarin = null; iceShots = []; guille = null; scissors = null; meteors = []; booms = [];
       resolve(result);
     };
     const chunk = () => {

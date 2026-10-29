@@ -248,6 +248,8 @@ const SFX = {
   eat:     { gap: 0.1,  play: (d, t) => { tone(d, 'square', freq('C5'), t, 0.06, 0.05); tone(d, 'square', freq('G5'), t + 0.07, 0.1, 0.05); } },
   iceShot: { gap: 0.1,  play: (d, t) => { tone(d, 'triangle', 900, t, 0.12, 0.05, { glideTo: 1500 }); noise(d, t, 0.1, 0.04, 'highpass', 5000); } },
   freeze:  { gap: 0.08, play: (d, t) => { tone(d, 'sine', 1800, t, 0.25, 0.05, { glideTo: 2600 }); tone(d, 'sine', 2700, t + 0.04, 0.2, 0.03); noise(d, t, 0.18, 0.06, 'highpass', 6000); } },
+  meteor:  { gap: 0.12, play: (d, t) => { noise(d, t, 0.45, 0.2, 'lowpass', 700); tone(d, 'sawtooth', 120, t, 0.35, 0.09, { glideTo: 40, lowpass: 800 }); } },
+  scissors:{ gap: 0.1,  play: (d, t) => { noise(d, t, 0.05, 0.06, 'highpass', 6000); noise(d, t + 0.07, 0.05, 0.06, 'highpass', 6000); tone(d, 'triangle', 1300, t, 0.06, 0.03, { glideTo: 900 }); } },
   heal:    { gap: 0.1,  play: (d, t) => ['C6', 'E6', 'G6'].forEach((n, i) => tone(d, 'sine', freq(n), t + i * 0.05, 0.14, 0.05)) },
   summon:  { gap: 0.3,  play: (d, t) => { tone(d, 'sine', 220, t, 0.6, 0.06, { glideTo: 880, attack: 0.1 }); noise(d, t + 0.1, 0.4, 0.04, 'bandpass', 2500); } },
   roar:    { gap: 0.4,  play: (d, t) => { tone(d, 'sawtooth', 110, t, 0.7, 0.09, { glideTo: 55, lowpass: 700, attack: 0.05 }); noise(d, t, 0.6, 0.12, 'lowpass', 500); } },

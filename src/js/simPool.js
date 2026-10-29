@@ -85,8 +85,8 @@ function runOnWorkers(ws, jobs, results, tick, cancelled) {
       if (next >= jobs.length) { if (pending === 0) end(); return; }
       const id = next++;
       pending++;
-      const { seed, aiParams, maxSeconds = 600, startRound = 1, boosts = null } = jobs[id];
-      w.postMessage({ id, seed, aiParams, maxSeconds, startRound, boosts });
+      const { seed, aiParams, maxSeconds = 600, startRound = 1, boosts = null, difficulty = 'normal' } = jobs[id];
+      w.postMessage({ id, seed, aiParams, maxSeconds, startRound, boosts, difficulty });
     };
     ws.forEach(w => {
       w.onmessage = ({ data }) => {

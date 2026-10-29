@@ -15,7 +15,8 @@ export const ITEMS = {
   coinsx2:  { name: 'X2 Monedas',   price: 675, desc: 'Ganas el doble de CapoCoins por cada enemigo.' },
   // ayudante (del primer Salvando Otare): vuela junto al jugador más herido y le lanza corazones (game.js)
   bonkchanti: { name: 'BonkChanti', price: 1250, desc: 'Ayudante: vuela junto al más herido y le lanza corazones que curan.' },
-  otarin:   { name: 'Otarin',       price: 1850, desc: 'Ayudante: cubito de hielo que congela a los enemigos más peligrosos.' }
+  otarin:   { name: 'Otarin',       price: 1850, desc: 'Ayudante: cubito de hielo que congela a los enemigos más peligrosos.' },
+  guille:   { name: 'Guille',       price: 2500, desc: 'Ayudante: lanza meteoritos donde hay más enemigos y tijeras que vuelven como un boomerang.' }
 };
 
 // Opciones del selector "Objetos" de Predicción y Entrenamiento (simular con objetos de la tienda)
@@ -29,10 +30,11 @@ export const BOOST_OPTIONS = {
   armor:    { label: 'Armadura',  boosts: { armor: true } },
   bonk:     { label: 'BonkChanti', boosts: { bonkchanti: true } },
   otarin:   { label: 'Otarin',    boosts: { otarin: true } },
-  all:      { label: 'Todos',     boosts: { speed: true, strength: true, health: true, armor: true, coinsx2: true, bonkchanti: true, otarin: true } }
+  guille:   { label: 'Guille',    boosts: { guille: true } },
+  all:      { label: 'Todos',     boosts: { speed: true, strength: true, health: true, armor: true, coinsx2: true, bonkchanti: true, otarin: true, guille: true } }
 };
 // Texto de una opción: 'Mis objetos (VEL, FUE, VIDA, BONK)'
-const SHORT = { speed: 'VEL', strength: 'FUE', health: 'VIDA', armor: 'ARM', coinsx2: 'x2$', bonkchanti: 'BONK', otarin: 'OTA' };
+const SHORT = { speed: 'VEL', strength: 'FUE', health: 'VIDA', armor: 'ARM', coinsx2: 'x2$', bonkchanti: 'BONK', otarin: 'OTA', guille: 'GUI' };
 export function boostLabel(key) {
   if (key !== 'mine') return (BOOST_OPTIONS[key] || BOOST_OPTIONS.none).label;
   const on = Object.entries(getActiveBoosts()).filter(([, v]) => v).map(([k]) => SHORT[k] || k);
@@ -81,7 +83,8 @@ export function getActiveBoosts() {
   load();
   return { speed: wallet.items.speed === true, strength: wallet.items.strength === true, health: wallet.items.health === true,
     armor: wallet.items.armor === true, coinsx2: wallet.items.coinsx2 === true,
-    bonkchanti: wallet.items.bonkchanti === true, otarin: wallet.items.otarin === true };
+    bonkchanti: wallet.items.bonkchanti === true, otarin: wallet.items.otarin === true,
+    guille: wallet.items.guille === true };
 }
 
 export function earnCoins(n) {

@@ -11,9 +11,20 @@ import { handleShopAction, refreshShop } from './tiendaUI.js';
 import { refreshRanks, handleRanksAction } from './ranking.js';
 import { refreshMissions, handleMissionAction, refreshMissionBadge } from './misionesUI.js';
 import { survivalUnlocked } from './kills.js';
+import { DIFFICULTIES } from './game.js';
 import { getControlPrefs, setControlPref, controlModes } from './controles.js';
 import { createTouchControls, removeTouchControls } from './touch.js';
 import { initMusic, playSong, setBattleState, sfx, jingle, setDucked, setVolume, getVolume, setMusicEnabled, isMusicEnabled, setSfxEnabled, isSfxEnabled } from './music.js';
+
+// DIFICULTAD elegida en JUGAR (se recuerda en el navegador)
+const DIFFICULTY_KEY = 'salvandoOtare.difficulty';
+function getDifficulty() {
+  try { const d = localStorage.getItem(DIFFICULTY_KEY); return DIFFICULTIES[d] ? d : 'normal'; } catch (e) { return 'normal'; }
+}
+function setDifficulty(d) {
+  if (!DIFFICULTIES[d]) return;
+  try { localStorage.setItem(DIFFICULTY_KEY, d); } catch (e) {}
+}
 
 const Screens = {
   MENU: 'screen-menu',
@@ -152,7 +163,9 @@ const app = {
   // Opciones de control para la partida: quién maneja a cada jugador, botones táctiles y la IA compañera
   // (la original; la entrenada si eres admin y tienes una guardada)
   controlOptions(){
-    const controls = controlModes();
+    let controls = controlModes();
+    // la IA con los dos jugadores es solo para el admin
+    if (controls[0] === 'ai' && controls[1] === 'ai' && !isAdmin()) controls = ['keys', 'keys'];
     const touchIdx = controls.indexOf('touch');
     const touch = touchIdx >= 0 ? createTouchControls(this.appEl, touchIdx === 0 ? 'melee' : 'shooter') : null;
     const partnerAi = isAdmin() ? getTrained()?.params ?? null : null;
@@ -216,8 +229,8 @@ const app = {
       case 'play-survival': {
         const survival = action === 'play-survival';
         if (survival && !survivalUnlocked() && !isAdmin()) break;
-        // objetos de la TIENDA activos + controles de Ajustes (2 jugadores, solo con IA, o móvil)
-        this.launchGame({ boosts: getActiveBoosts(), ...this.controlOptions(), survival });
+        // objetos de la TIENDA activos + controles de Ajustes (2 jugadores, solo con IA, o móvil) + dificultad
+        this.launchGame({ boosts: getActiveBoosts(), ...this.controlOptions(), survival, difficulty: getDifficulty() });
         break;
       }
       case 'missions':
@@ -226,6 +239,10 @@ const app = {
         break;
       case 'mission-claim':
         handleMissionAction(action, btn, document.getElementById(Screens.MISSIONS));
+        break;
+      case 'set-difficulty':
+        setDifficulty(btn.dataset.value);
+        this.refreshDifficulty();
         break;
       case 'set-device':
       case 'set-pcplayers':
@@ -372,8 +389,14 @@ const app = {
       btn.textContent = open ? 'SUPERVIVENCIA' : '🔒 SUPERVIVENCIA';
     }
     const lock = document.querySelector('.survival-lock');
-    if (lock) lock.textContent = open ? '' : 'Vence al jefe de la ronda 20 para desbloquear SUPERVIVENCIA';
+    if (lock) lock.textContent = open ? '' : 'Vence al jefe en DIFÍCIL para desbloquear SUPERVIVENCIA';
+    this.refreshDifficulty();
     this.showScreen(Screens.MODE);
+  },
+
+  refreshDifficulty(){
+    const level = getDifficulty();
+    document.querySelectorAll('[data-action="set-difficulty"]').forEach(b => b.classList.toggle('selected', b.dataset.value === level));
   },
 
   // Submenú SIMULACIONES, con una línea que dice qué IA se está usando
@@ -538,7 +561,7 @@ const app = {
     }
   },
 
-  async startGame({ simulation = false, aiParams = null, startRound = 1, hold = false, boosts = null, controls = null, touch = null, partnerAi = null, survival = false } = {}){
+  async startGame({ simulation = false, aiParams = null, startRound = 1, hold = false, boosts = null, controls = null, touch = null, partnerAi = null, survival = false, difficulty = 'normal' } = {}){
     this._returnScreen = simulation ? Screens.SIMS : Screens.MENU;
     this.showScreen(Screens.GAME);
     try {
@@ -547,7 +570,7 @@ const app = {
       this.gameModule = m;
       // si se viene de una predicción cancelada, esperar a que suelte la partida sin canvas
       while (m.isBusy()) await new Promise(r => setTimeout(r, 20));
-      m.start({ canvas: this.canvas, onResize: () => this.resizeCanvasToDisplaySize(), simulation, aiParams, startRound, hold, boosts, controls, touch, partnerAi, survival });
+      m.start({ canvas: this.canvas, onResize: () => this.resizeCanvasToDisplaySize(), simulation, aiParams, startRound, hold, boosts, controls, touch, partnerAi, survival, difficulty });
       // ensure pause button visible
       this.showPauseButton();
     } catch (err) {

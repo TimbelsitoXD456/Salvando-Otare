@@ -7,7 +7,7 @@
 // - Admin: la cuenta con app_metadata.role = 'admin' (supabase/admin.sql) ve SIMULACIONES.
 // - Sin conexión con Supabase (sin internet, file://...), el juego funciona igual en modo invitado.
 import { getKills, replaceKills, getBestRound, replaceBestRound, PLAYERS,
-  getBestSurvival, replaceBestSurvival, getWins, replaceWins } from './kills.js';
+  getBestSurvival, replaceBestSurvival, getWins, replaceWins, getHardWins, replaceHardWins } from './kills.js';
 import { setClaimed } from './misiones.js';
 import { getTrained, replaceTrained } from './iaEntrenada.js';
 import { getPending, clearPending, setWallet, resetWallet } from './tienda.js';
@@ -21,10 +21,10 @@ const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+
 const OWNER_KEY = 'salvandoOtare.owner'; // de qué cuenta es el progreso guardado en este navegador
 const PUSH_DELAY = 1500;
 const BASE_COLS = 'kills, best_round, trained_ai, capocoins, items';
-const MISSION_COLS = 'best_survival, wins, missions';   // columnas de supabase/misiones.sql
+const MISSION_COLS = 'best_survival, wins, missions, hard_wins';   // columnas de supabase/misiones.sql
 let missionCols = true;   // false si el servidor aún no tiene esas columnas
 // error de Supabase por una columna que no existe
-const missingColumn = error => /column|best_survival|wins|missions/i.test(error?.message || '') && /exist|find|schema/i.test(error?.message || '');
+const missingColumn = error => /column|best_survival|wins|missions|hard_wins/i.test(error?.message || '') && /exist|find|schema/i.test(error?.message || '');
 
 let sb = null;
 let session = null;
@@ -123,6 +123,8 @@ async function syncOnLogin() {
   replaceBestSurvival(guest || mine ? Math.max(row?.best_survival || 0, getBestSurvival()) : (row?.best_survival || 0));
   const cloudWins = row?.wins || 0;
   replaceWins(guest ? cloudWins + getWins() : mine ? Math.max(cloudWins, getWins()) : cloudWins);
+  const cloudHard = row?.hard_wins || 0;
+  replaceHardWins(guest ? cloudHard + getHardWins() : mine ? Math.max(cloudHard, getHardWins()) : cloudHard);
   setClaimed(row?.missions || {});
   if (row?.trained_ai) replaceTrained(row.trained_ai);
   else if (!(guest || mine)) replaceTrained(null);
@@ -252,11 +254,11 @@ async function push() {
     trained_ai: trained ? { ...trained } : null,
     updated_at: new Date().toISOString()
   };
-  if (missionCols) Object.assign(data, { best_survival: getBestSurvival(), wins: getWins() });
+  if (missionCols) Object.assign(data, { best_survival: getBestSurvival(), wins: getWins(), hard_wins: getHardWins() });
   let { error } = await sb.from('progress').upsert(data);
   if (error && missionCols && missingColumn(error)) {
     missionCols = false;   // supabase/misiones.sql aún sin ejecutar: guardar lo de siempre
-    delete data.best_survival; delete data.wins;
+    delete data.best_survival; delete data.wins; delete data.hard_wins;
     ({ error } = await sb.from('progress').upsert(data));
   }
   syncState = error ? 'error' : 'synced';

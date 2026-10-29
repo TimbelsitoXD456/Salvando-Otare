@@ -8,7 +8,7 @@
 const KEY = 'salvandoOtare.controls';
 const DEFAULTS = {
   device: typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches ? 'mobile' : 'pc',
-  pcPlayers: 'both',        // 'both' | 'lanzziano' | 'jhoabxi'
+  pcPlayers: 'both',        // 'both' | 'lanzziano' | 'jhoabxi' | 'ai' (solo admin: la IA juega con los dos)
   mobileChar: 'lanzziano'   // 'lanzziano' | 'jhoabxi'
 };
 
@@ -26,10 +26,11 @@ export function setControlPref(name, value) {
 //   'keys'  sus teclas de siempre (2 jugadores en el mismo teclado)
 //   'solo'  cualquiera de las dos distribuciones de teclas (jugando solo)
 //   'touch' botones en pantalla
-//   'ai'    la IA compañera
+//   'ai'    la IA compañera (con pcPlayers 'ai', los dos: solo para el admin, menu.js lo comprueba)
 export function controlModes(prefs = getControlPrefs()) {
   if (prefs.device === 'mobile') return prefs.mobileChar === 'jhoabxi' ? ['ai', 'touch'] : ['touch', 'ai'];
   if (prefs.pcPlayers === 'lanzziano') return ['solo', 'ai'];
   if (prefs.pcPlayers === 'jhoabxi') return ['ai', 'solo'];
+  if (prefs.pcPlayers === 'ai') return ['ai', 'ai'];
   return ['keys', 'keys'];
 }
