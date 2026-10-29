@@ -29,7 +29,6 @@ let scissors = [];     // sus tijeras (van rectas y atraviesan enemigos)
 let meteors = [];      // meteoritos avisados que van a caer
 let booms = [];        // explosiones de meteorito (solo dibujo)
 let nico = null;       // ayudante Nico's Power (objeto de la TIENDA), o null
-let nicoOrbs = [];     // bolas moradas que ponen el escudo
 let world = { 
   gravity: 1800, 
   groundOffset: 80,
@@ -361,8 +360,7 @@ function setupPlayers(canvasW, canvasH) {
   guille = boosts.guille ? { x: players[0].x + 60, y: players[0].y - 60, facing: 1, meteorCd: GUILLE.firstMeteor, scissorsCd: GUILLE.firstScissors, castT: null, throwT: null } : null;
   scissors = []; meteors = []; booms = [];
   // ayudante Nico's Power: aparece junto a Jhoabxi
-  nico = boosts.nico ? { x: players[1].x - 30, y: players[1].y - 40, facing: 1, cooldown: NICO.firstOrb, castT: null } : null;
-  nicoOrbs = [];
+  nico = boosts.nico ? { x: players[1].x - 30, y: players[1].y - 40, facing: 1, cooldown: NICO.first, castT: null } : null;
   runCoins = 0;
   simStats = newSimStats();
   bullets = []; enemyBullets = []; enemies = [];
@@ -488,7 +486,7 @@ function resizeCanvasInternal() {
 }
 
 function shiftWorldY(dy) {
-  for (const list of [players, enemies, bullets, enemyBullets, platforms, foods, floatTexts, heartOrbs, iceShots, meteors, booms, scissors, nicoOrbs]) {
+  for (const list of [players, enemies, bullets, enemyBullets, platforms, foods, floatTexts, heartOrbs, iceShots, meteors, booms, scissors]) {
     for (const o of list) o.y += dy;
   }
   if (helper) helper.y += dy;
@@ -1076,17 +1074,16 @@ function updateGuille(dt, W) {
 
 // --- Ayudante Nico's Power (dibujo en ayudantes.js) ---
 // Como en el primer Salvando Otare: cuando un jugador se queda con poca vida, Nico (gatito blanco con la
-// camiseta del Milan) le lanza una bola morada que le pone un ESCUDO: mientras dura no le hacen daño los
-// golpes ni las balas, y las balas REBOTAN contra el enemigo que las disparó (¡JoJo's reference!).
-// En el primer juego duraba 5 s y se repetía a los 3 s (casi inmortal); aquí dura menos y tarda más en volver.
+// camiseta del Milan) le pone al momento un ESCUDO (en el primer juego lo mandaba con una bola, que a veces
+// llegaba tarde): mientras dura no le hacen daño los golpes ni las balas, y las balas REBOTAN contra el
+// enemigo que las disparó (¡JoJo's reference!). En el primer juego duraba 5 s y se repetía a los 3 s (casi
+// inmortal); aquí dura menos y tarda más en volver.
 const NICO = {
   speed: 300,        // vuela (px/s)
   lowHp: 0.25,       // protege al que baja de esta fracción de vida
-  orbSpeed: 520,     // la bola persigue al jugador
-  orbLife: 2.0,
   shield: 3.0,       // segundos de escudo
-  cooldown: 14.0,    // segundos entre bolas
-  firstOrb: 1.0,
+  cooldown: 14.0,    // segundos entre escudos
+  first: 1.0,
   reflectSpeed: 420  // velocidad de las balas rebotadas
 };
 
@@ -1127,26 +1124,14 @@ function updateNico(dt, W) {
   if (d > 1) { const step = Math.min(d, NICO.speed * dt); nico.x += dx / d * step; nico.y += dy / d * step; }
   if (Math.abs(cx - nico.x) > 4) nico.facing = Math.sign(cx - nico.x);
   nico.cooldown -= dt;
-  if (nico.cooldown <= 0 && target.hp / target.maxHp <= NICO.lowHp && !nicoShielded(target) && !nicoOrbs.some(o => o.target === target)) {
-    nicoOrbs.push({ x: nico.x, y: nico.y, target, life: NICO.orbLife });
+  // el escudo aparece al instante sobre el que se queda con poca vida
+  if (nico.cooldown <= 0 && target.hp / target.maxHp <= NICO.lowHp && !nicoShielded(target)) {
+    target.nicoShield = NICO.shield;
     nico.cooldown = NICO.cooldown;
     nico.castT = gameTime;
-    playSfx('nicoOrb');
-  }
-  // bolas moradas: persiguen a su jugador y le ponen el escudo
-  for (let i = nicoOrbs.length - 1; i >= 0; i--) {
-    const o = nicoOrbs[i], t = o.target;
-    o.life -= dt;
-    if (o.life <= 0 || !t.alive) { nicoOrbs.splice(i, 1); continue; }
-    const ox = t.x + t.w / 2 - o.x, oy = t.y + t.h * 0.45 - o.y, od = Math.hypot(ox, oy) || 1;
-    o.x += ox / od * NICO.orbSpeed * dt; o.y += oy / od * NICO.orbSpeed * dt;
-    if (od < 20) {
-      t.nicoShield = NICO.shield;
-      floatTexts.push({ x: t.x + t.w / 2 - 22, y: t.y - 14, text: '¡ESCUDO!', color: '#d08bff', life: 1.0 });
-      playSfx('shield');
-      simStats.shields++;
-      nicoOrbs.splice(i, 1);
-    }
+    floatTexts.push({ x: cx - 22, y: target.y - 14, text: '¡ESCUDO!', color: '#d08bff', life: 1.0 });
+    playSfx('shield');
+    simStats.shields++;
   }
 }
 
@@ -1621,9 +1606,8 @@ function render() {
   booms.forEach(b => drawMeteor(ctx, b, GUILLE, true));
   if (guille) drawGuille(ctx, guille, gameTime);
   scissors.forEach(sc => drawScissors(ctx, sc));
-  // ayudante Nico's Power y sus bolas
+  // ayudante Nico's Power
   if (nico) drawNico(ctx, nico, gameTime);
-  nicoOrbs.forEach(o => drawNicoOrb(ctx, o, gameTime));
 
   floatTexts.forEach(t => drawFloatText(ctx, t));
 
@@ -1827,7 +1811,7 @@ export function stop() {
   else window.removeEventListener('resize', resizeCanvasInternal);
   if (canvas) canvas.removeEventListener('click', handleGameOverClick);
   gameOver = false; gameOverType = ''; lastGroundY = null;
-  canvas = null; ctx = null; players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; helper = null; heartOrbs = []; otarin = null; iceShots = []; guille = null; scissors = []; meteors = []; booms = []; nico = null; nicoOrbs = []; onResizeCallback = null; resetInput();
+  canvas = null; ctx = null; players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; helper = null; heartOrbs = []; otarin = null; iceShots = []; guille = null; scissors = []; meteors = []; booms = []; nico = null; onResizeCallback = null; resetInput();
 }
 // --- Modo predicción ---
 // Corre una partida de simulación IA completa sin canvas ni requestAnimationFrame: física con dt fijo
@@ -1898,7 +1882,7 @@ export function runHeadless({ seed = 1, maxSeconds = 600, onProgress, isCancelle
       };
       headlessView = null; headlessBusy = false; simulationMode = false; aiParams = null; boosts = {}; difficulty = 'normal';
       gameOver = false; gameOverType = '';
-      players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; helper = null; heartOrbs = []; otarin = null; iceShots = []; guille = null; scissors = []; meteors = []; booms = []; nico = null; nicoOrbs = [];
+      players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; helper = null; heartOrbs = []; otarin = null; iceShots = []; guille = null; scissors = []; meteors = []; booms = []; nico = null;
       resolve(result);
     };
     const chunk = () => {

@@ -17,7 +17,7 @@ export const ITEMS = {
   bonkchanti: { name: 'BonkChanti', price: 1250, desc: 'Ayudante: vuela junto al más herido y le lanza corazones que curan.' },
   otarin:   { name: 'Otarin',       price: 1850, desc: 'Ayudante: cubito de hielo que congela a los enemigos más peligrosos.' },
   guille:   { name: 'Guille',       price: 2500, desc: 'Ayudante: lanza meteoritos donde hay más enemigos y tijeras que atraviesan a todos los de la línea.' },
-  nico:     { name: "Nico's Power", price: 6250, desc: 'Ayudante: al que se queda con poca vida le pone un escudo que bloquea los golpes y devuelve las balas.' }
+  nico:     { name: "Nico's Power", price: 6250, desc: 'Ayudante: al que se queda con poca vida le pone al instante un escudo que bloquea los golpes y devuelve las balas.' }
 };
 
 // Opciones del selector "Objetos" de Predicción y Entrenamiento (simular con objetos de la tienda)

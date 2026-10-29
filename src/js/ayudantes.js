@@ -373,7 +373,7 @@ export function drawNico(ctx, n, time) {
   ctx.fillStyle = '#d08bff'; ctx.fillText(label, lx, ly);
 }
 
-// Bola morada de Nico (también las balas que rebota el escudo, más pequeñas)
+// Bola morada: las balas que rebota el escudo de Nico
 export function drawNicoOrb(ctx, o, time, r = 9) {
   ctx.save();
   ctx.translate(Math.round(o.x), Math.round(o.y));
