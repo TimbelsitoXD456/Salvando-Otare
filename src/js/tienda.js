@@ -16,7 +16,7 @@ export const ITEMS = {
   // ayudante (del primer Salvando Otare): vuela junto al jugador más herido y le lanza corazones (game.js)
   bonkchanti: { name: 'BonkChanti', price: 1250, desc: 'Ayudante: vuela junto al más herido y le lanza corazones que curan.' },
   otarin:   { name: 'Otarin',       price: 1850, desc: 'Ayudante: cubito de hielo que congela a los enemigos más peligrosos.' },
-  guille:   { name: 'Guille',       price: 2500, desc: 'Ayudante: lanza meteoritos donde hay más enemigos y tijeras que vuelven como un boomerang.' }
+  guille:   { name: 'Guille',       price: 2500, desc: 'Ayudante: lanza meteoritos donde hay más enemigos y tijeras que atraviesan a todos los de la línea.' }
 };
 
 // Opciones del selector "Objetos" de Predicción y Entrenamiento (simular con objetos de la tienda)

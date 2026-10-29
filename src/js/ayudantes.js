@@ -5,7 +5,7 @@
 //   pantalón corto morado y zapatillas amarillas y rojas). Va flotando junto al jugador más herido
 //   y le lanza corazones que curan.
 //   Otarin: cubito de hielo volador; dispara bolas de hielo que congelan a los enemigos.
-//   Guille: piloto de carreras; tira meteoritos y tijeras que vuelven como un boomerang.
+//   Guille: piloto de carreras; tira meteoritos y tijeras perforantes.
 import { grid, compose, outline, toCanvas, blit } from './spriteEngine.js';
 
 const PALETTE = {
@@ -208,7 +208,7 @@ export function drawFrozen(ctx, e, time) {
   ctx.restore();
 }
 
-// ---------- GUILLE: piloto con casco y mono de carreras; tira meteoritos y tijeras boomerang ----------
+// ---------- GUILLE: piloto con casco y mono de carreras; tira meteoritos y tijeras perforantes ----------
 // Como en el diseño: casco verde lima con franja oscura y visera azul, mono rojo con parches blancos,
 // bandera azul y blanca, cinturón negro y "SENNA" en amarillo. Lleva una Bloxy Cola en el hombro.
 const GUI_PAL = {
@@ -272,7 +272,7 @@ export function drawGuille(ctx, g, time) {
   ctx.fillStyle = '#ff8a7a'; ctx.fillText(label, lx, ly);
 }
 
-// Tijeras boomerang girando: dos hojas plateadas con mangos rojos
+// Tijeras girando: dos hojas plateadas con mangos rojos
 export function drawScissors(ctx, s) {
   ctx.save();
   ctx.translate(Math.round(s.x), Math.round(s.y));

@@ -25,7 +25,7 @@ let heartOrbs = [];    // corazones curativos que lanza BonkChanti
 let otarin = null;     // ayudante Otarin (objeto de la TIENDA), o null
 let iceShots = [];     // bolas de hielo de Otarin
 let guille = null;     // ayudante Guille (objeto de la TIENDA), o null
-let scissors = null;   // sus tijeras boomerang (solo unas a la vez)
+let scissors = [];     // sus tijeras (van rectas y atraviesan enemigos)
 let meteors = [];      // meteoritos avisados que van a caer
 let booms = [];        // explosiones de meteorito (solo dibujo)
 let world = { 
@@ -357,7 +357,7 @@ function setupPlayers(canvasW, canvasH) {
   iceShots = [];
   // ayudante Guille: aparece encima de los dos
   guille = boosts.guille ? { x: players[0].x + 60, y: players[0].y - 60, facing: 1, meteorCd: GUILLE.firstMeteor, scissorsCd: GUILLE.firstScissors, castT: null, throwT: null } : null;
-  scissors = null; meteors = []; booms = [];
+  scissors = []; meteors = []; booms = [];
   runCoins = 0;
   simStats = newSimStats();
   bullets = []; enemyBullets = []; enemies = [];
@@ -483,13 +483,12 @@ function resizeCanvasInternal() {
 }
 
 function shiftWorldY(dy) {
-  for (const list of [players, enemies, bullets, enemyBullets, platforms, foods, floatTexts, heartOrbs, iceShots, meteors, booms]) {
+  for (const list of [players, enemies, bullets, enemyBullets, platforms, foods, floatTexts, heartOrbs, iceShots, meteors, booms, scissors]) {
     for (const o of list) o.y += dy;
   }
   if (helper) helper.y += dy;
   if (otarin) otarin.y += dy;
   if (guille) guille.y += dy;
-  if (scissors) scissors.y += dy;
 }
 
 // Jefe: fase de furia al llegar a esta fracción de vida
@@ -936,22 +935,23 @@ function updateOtarin(dt, W) {
 // --- Ayudante Guille (dibujo en ayudantes.js) ---
 // En el primer Salvando Otare tiraba un meteorito cada 1.5 s (50 de daño en 120 px) y unas tijeras
 // cada segundo que iban en línea recta: arrasaba rondas enteras. Aquí lanza menos y avisa dónde cae
-// el meteorito, y las tijeras son un BOOMERANG: las tira hacia el enemigo con el que más enemigos
-// atraviesa y vuelven a sus manos (pegan a la ida y a la vuelta). El jefe es inmune (sus secuaces no).
+// el meteorito. Las tijeras van RECTAS y son PERFORANTES como en el primer juego (atraviesan a todos los
+// enemigos de la línea, 20 a cada uno): las tira hacia donde más enemigos pillan. El jefe es inmune (sus secuaces no).
 const GUILLE_ID = 2;   // e.lastHitBy de lo que mata Guille (0 y 1 son los jugadores)
 const GUILLE = {
   speed: 320,          // vuela (px/s)
-  range: 420,          // solo ataca a enemigos a esta distancia de algún jugador
+  range: 420,          // solo ataca a enemigos en pantalla o a esta distancia de algún jugador
+  hover: 130,          // se pone a esta distancia de los enemigos, del lado de los jugadores
   meteorCd: 5.5,       // segundos entre meteoritos
   firstMeteor: 3.0,
   meteorWarn: 0.9,     // la sombra avisa en el suelo antes de que caiga
   meteorDmg: 35,
   meteorRadius: 80,
-  scissorsCd: 2.6,     // segundos entre lanzamientos (cuando las tijeras ya volvieron)
+  scissorsCd: 1.2,     // segundos entre tijeras (en el primer juego, 1)
   firstScissors: 1.0,
-  scissorsSpeed: 520,
-  scissorsReach: 330,  // hasta dónde llegan antes de volver
-  scissorsDmg: 14,     // por pasada (ida y vuelta)
+  scissorsSpeed: 620,
+  scissorsReach: 700,  // hasta dónde llegan (luego desaparecen)
+  scissorsDmg: 20,     // a cada enemigo que atraviesan
   scissorsHitR: 22
 };
 
@@ -978,14 +978,25 @@ function updateGuille(dt, W) {
   if (!guille) return;
   const alive = players.filter(p => p.alive);
   if (!alive.length) return;
-  const nearPlayers = e => { const c = enemyCenter(e); return alive.some(p => Math.hypot(p.x + p.w / 2 - c.x, p.y + p.h / 2 - c.y) <= GUILLE.range); };
-  const targets = enemies.filter(e => e.alive && e.kind !== 'boss' && nearPlayers(e));
+  const inReach = e => {
+    const c = enemyCenter(e);
+    return (c.x >= world.cameraX && c.x <= world.cameraX + W) || alive.some(p => Math.hypot(p.x + p.w / 2 - c.x, p.y + p.h / 2 - c.y) <= GUILLE.range);
+  };
+  const targets = enemies.filter(e => e.alive && e.kind !== 'boss' && inReach(e));
 
-  // flota detrás de los jugadores, por encima, sin salirse de la pantalla
+  // SIGUE A LOS ENEMIGOS: flota junto al grupo más cercano a los jugadores, un poco por encima y del
+  // lado de los jugadores (así sus tijeras cruzan el grupo en horizontal); sin enemigos, con los jugadores
   const midX = alive.reduce((a, p) => a + p.x + p.w / 2, 0) / alive.length;
-  const front = targets.length ? Math.sign(targets.reduce((a, e) => a + enemyCenter(e).x, 0) / targets.length - midX) || 1 : guille.facing;
-  const wantX = Math.max(world.cameraX + 30, Math.min(world.cameraX + W - 30, midX - front * 50));
-  const wantY = Math.min(...alive.map(p => p.y)) - 60;
+  let wantX = midX, wantY = Math.min(...alive.map(p => p.y)) - 60, front = guille.facing;
+  if (targets.length) {
+    const near = targets.reduce((b, e) => (Math.abs(enemyCenter(e).x - midX) < Math.abs(enemyCenter(b).x - midX) ? e : b));
+    const group = targets.filter(e => Math.abs(enemyCenter(e).x - enemyCenter(near).x) <= 220);
+    const gx = group.reduce((a, e) => a + enemyCenter(e).x, 0) / group.length;
+    front = Math.sign(gx - midX) || front;
+    wantX = gx - front * GUILLE.hover;
+    wantY = Math.min(...group.map(e => e.y)) - 50;
+  }
+  wantX = Math.max(world.cameraX + 30, Math.min(world.cameraX + W - 30, wantX));
   const dx = wantX - guille.x, dy = wantY - guille.y, d = Math.hypot(dx, dy);
   if (d > 1) { const step = Math.min(d, GUILLE.speed * dt); guille.x += dx / d * step; guille.y += dy / d * step; }
   guille.facing = front;
@@ -1021,44 +1032,35 @@ function updateGuille(dt, W) {
   }
   for (let i = booms.length - 1; i >= 0; i--) if ((booms[i].t -= dt) <= 0) booms.splice(i, 1);
 
-  // TIJERAS BOOMERANG: hacia el enemigo con el que la ida y la vuelta atraviesan más enemigos
-  if (!scissors) {
-    guille.scissorsCd -= dt;
-    if (guille.scissorsCd <= 0 && targets.length) {
-      let best = null, bestScore = 0;
-      for (const e of targets) {
-        const c = enemyCenter(e), ddx = c.x - guille.x, ddy = c.y - guille.y, dd = Math.hypot(ddx, ddy) || 1;
-        if (dd > GUILLE.scissorsReach + 40) continue;
-        const ex = guille.x + ddx / dd * GUILLE.scissorsReach, ey = guille.y + ddy / dd * GUILLE.scissorsReach;
-        let s = 0;
-        for (const o of targets) { const oc = enemyCenter(o); if (distToSegment(oc.x, oc.y, guille.x, guille.y, ex, ey) <= GUILLE.scissorsHitR + o.w / 2) s += hitValue(o, GUILLE.scissorsDmg * 2); }
-        if (s > bestScore) { bestScore = s; best = { dx: ddx / dd, dy: ddy / dd }; }
-      }
-      if (best) {
-        scissors = { x: guille.x, y: guille.y, vx: best.dx * GUILLE.scissorsSpeed, vy: best.dy * GUILLE.scissorsSpeed, out: GUILLE.scissorsReach, back: false, hit: new Set(), spin: 0 };
-        guille.throwT = gameTime;
-        playSfx('scissors');
-      }
+  // TIJERAS: rectas y perforantes, hacia la línea que atraviesa a más enemigos
+  guille.scissorsCd -= dt;
+  if (guille.scissorsCd <= 0 && targets.length) {
+    let best = null, bestScore = 0;
+    for (const e of targets) {
+      const c = enemyCenter(e), ddx = c.x - guille.x, ddy = c.y - guille.y, dd = Math.hypot(ddx, ddy) || 1;
+      const ex = guille.x + ddx / dd * GUILLE.scissorsReach, ey = guille.y + ddy / dd * GUILLE.scissorsReach;
+      let sc = 0;
+      for (const o of targets) { const oc = enemyCenter(o); if (distToSegment(oc.x, oc.y, guille.x, guille.y, ex, ey) <= GUILLE.scissorsHitR + o.w / 2) sc += hitValue(o, GUILLE.scissorsDmg); }
+      if (sc > bestScore) { bestScore = sc; best = { dx: ddx / dd, dy: ddy / dd }; }
     }
-  } else {
-    const s = scissors;
-    s.spin += dt * 18;
-    if (!s.back) {
-      s.x += s.vx * dt; s.y += s.vy * dt;
-      s.out -= GUILLE.scissorsSpeed * dt;
-      if (s.out <= 0) { s.back = true; s.hit = new Set(); }   // a la vuelta puede volver a pegar a los mismos
-    } else {
-      // vuelve a las manos de Guille (aunque se haya movido)
-      const bx = guille.x - s.x, by = guille.y - s.y, bd = Math.hypot(bx, by) || 1;
-      const step = GUILLE.scissorsSpeed * 1.1 * dt;
-      if (bd <= step + 6) { scissors = null; guille.scissorsCd = GUILLE.scissorsCd; return; }
-      s.x += bx / bd * step; s.y += by / bd * step;
+    if (best) {
+      scissors.push({ x: guille.x, y: guille.y, vx: best.dx * GUILLE.scissorsSpeed, vy: best.dy * GUILLE.scissorsSpeed, left: GUILLE.scissorsReach, hit: new Set(), spin: 0 });
+      guille.scissorsCd = GUILLE.scissorsCd;
+      guille.throwT = gameTime;
+      playSfx('scissors');
     }
+  }
+  for (let i = scissors.length - 1; i >= 0; i--) {
+    const sc = scissors[i];
+    sc.spin += dt * 18;
+    sc.x += sc.vx * dt; sc.y += sc.vy * dt;
+    sc.left -= GUILLE.scissorsSpeed * dt;
+    if (sc.left <= 0) { scissors.splice(i, 1); continue; }
     for (const e of enemies) {
-      if (!e.alive || s.hit.has(e)) continue;
+      if (!e.alive || sc.hit.has(e)) continue;   // a cada enemigo solo le pega una vez
       const c = enemyCenter(e);
-      if (Math.abs(c.x - s.x) <= GUILLE.scissorsHitR + e.w / 2 && Math.abs(c.y - s.y) <= GUILLE.scissorsHitR + e.h / 2) {
-        s.hit.add(e);
+      if (Math.abs(c.x - sc.x) <= GUILLE.scissorsHitR + e.w / 2 && Math.abs(c.y - sc.y) <= GUILLE.scissorsHitR + e.h / 2) {
+        sc.hit.add(e);
         guilleHit(e, GUILLE.scissorsDmg);
       }
     }
@@ -1533,7 +1535,7 @@ function render() {
   meteors.forEach(m => drawMeteor(ctx, m, GUILLE));
   booms.forEach(b => drawMeteor(ctx, b, GUILLE, true));
   if (guille) drawGuille(ctx, guille, gameTime);
-  if (scissors) drawScissors(ctx, scissors);
+  scissors.forEach(sc => drawScissors(ctx, sc));
 
   floatTexts.forEach(t => drawFloatText(ctx, t));
 
@@ -1737,7 +1739,7 @@ export function stop() {
   else window.removeEventListener('resize', resizeCanvasInternal);
   if (canvas) canvas.removeEventListener('click', handleGameOverClick);
   gameOver = false; gameOverType = ''; lastGroundY = null;
-  canvas = null; ctx = null; players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; helper = null; heartOrbs = []; otarin = null; iceShots = []; guille = null; scissors = null; meteors = []; booms = []; onResizeCallback = null; resetInput();
+  canvas = null; ctx = null; players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; helper = null; heartOrbs = []; otarin = null; iceShots = []; guille = null; scissors = []; meteors = []; booms = []; onResizeCallback = null; resetInput();
 }
 // --- Modo predicción ---
 // Corre una partida de simulación IA completa sin canvas ni requestAnimationFrame: física con dt fijo
@@ -1806,7 +1808,7 @@ export function runHeadless({ seed = 1, maxSeconds = 600, onProgress, isCancelle
       };
       headlessView = null; headlessBusy = false; simulationMode = false; aiParams = null; boosts = {}; difficulty = 'normal';
       gameOver = false; gameOverType = '';
-      players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; helper = null; heartOrbs = []; otarin = null; iceShots = []; guille = null; scissors = null; meteors = []; booms = [];
+      players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; helper = null; heartOrbs = []; otarin = null; iceShots = []; guille = null; scissors = []; meteors = []; booms = [];
       resolve(result);
     };
     const chunk = () => {
