@@ -45,7 +45,8 @@ as $$
     ('acurar',    'bonkchanti', 1,   490),
     ('hacefrio',  'otarin',    1,    700),
     ('meteorito', 'guillebuy', 1,    1111),
-    ('loteria',   'items',     8,    2000)
+    ('jojo',      'nicobuy',   1,    1456),
+    ('loteria',   'items',     9,    2000)
   ) as m(id, kind, goal, reward)
   where m.id = mid;
 $$;
@@ -78,6 +79,7 @@ begin
     when 'bonkchanti' then case when pr.items ? 'bonkchanti' then 1 else 0 end
     when 'otarin'     then case when pr.items ? 'otarin' then 1 else 0 end
     when 'guillebuy'  then case when pr.items ? 'guille' then 1 else 0 end
+    when 'nicobuy'    then case when pr.items ? 'nico' then 1 else 0 end
     when 'guille'    then case when jsonb_typeof(pr.kills->'Guille') = 'number' then floor((pr.kills->>'Guille')::numeric) else 0 end
     when 'lanzziano' then case when jsonb_typeof(pr.kills->'Lanzziano') = 'number' then floor((pr.kills->>'Lanzziano')::numeric) else 0 end
     when 'jhoabxi'   then case when jsonb_typeof(pr.kills->'Jhoabxi')   = 'number' then floor((pr.kills->>'Jhoabxi')::numeric)   else 0 end

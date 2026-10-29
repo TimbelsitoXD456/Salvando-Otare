@@ -484,6 +484,7 @@ html,body{height:100%;margin:0;background:var(--bg);font-family:'Press Start 2P'
 .shop-item .menu-btn::before{ display:none; }
 /* insignia de X2 Monedas: dorada como una CapoCoin */
 .shop-badge-ice{ background:linear-gradient(135deg, #c0f3ff, #3fb8d8); color:#ffffff; text-shadow:0 0 8px #6aeaff; }
+.shop-badge-nico{ background:linear-gradient(135deg, #c46bff, #6a10b0); color:#ffffff; text-shadow:0 0 8px #a020f0; }
 .shop-badge-fire{ background:linear-gradient(135deg, #ffb02e, #e0261e); color:#ffffff; text-shadow:0 0 8px #ff3b2e; }
 .shop-badge-coins{ background:linear-gradient(135deg, #ffd24a, #b8801f); color:#5a3a08; text-shadow:0 0 6px #fff3b0; }
 /* botón con el precio, en dorado */

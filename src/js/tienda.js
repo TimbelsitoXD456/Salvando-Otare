@@ -16,7 +16,8 @@ export const ITEMS = {
   // ayudante (del primer Salvando Otare): vuela junto al jugador más herido y le lanza corazones (game.js)
   bonkchanti: { name: 'BonkChanti', price: 1250, desc: 'Ayudante: vuela junto al más herido y le lanza corazones que curan.' },
   otarin:   { name: 'Otarin',       price: 1850, desc: 'Ayudante: cubito de hielo que congela a los enemigos más peligrosos.' },
-  guille:   { name: 'Guille',       price: 2500, desc: 'Ayudante: lanza meteoritos donde hay más enemigos y tijeras que atraviesan a todos los de la línea.' }
+  guille:   { name: 'Guille',       price: 2500, desc: 'Ayudante: lanza meteoritos donde hay más enemigos y tijeras que atraviesan a todos los de la línea.' },
+  nico:     { name: "Nico's Power", price: 6250, desc: 'Ayudante: al que se queda con poca vida le pone un escudo que bloquea los golpes y devuelve las balas.' }
 };
 
 // Opciones del selector "Objetos" de Predicción y Entrenamiento (simular con objetos de la tienda)
@@ -31,10 +32,11 @@ export const BOOST_OPTIONS = {
   bonk:     { label: 'BonkChanti', boosts: { bonkchanti: true } },
   otarin:   { label: 'Otarin',    boosts: { otarin: true } },
   guille:   { label: 'Guille',    boosts: { guille: true } },
-  all:      { label: 'Todos',     boosts: { speed: true, strength: true, health: true, armor: true, coinsx2: true, bonkchanti: true, otarin: true, guille: true } }
+  nico:     { label: 'Nico',      boosts: { nico: true } },
+  all:      { label: 'Todos',     boosts: { speed: true, strength: true, health: true, armor: true, coinsx2: true, bonkchanti: true, otarin: true, guille: true, nico: true } }
 };
 // Texto de una opción: 'Mis objetos (VEL, FUE, VIDA, BONK)'
-const SHORT = { speed: 'VEL', strength: 'FUE', health: 'VIDA', armor: 'ARM', coinsx2: 'x2$', bonkchanti: 'BONK', otarin: 'OTA', guille: 'GUI' };
+const SHORT = { speed: 'VEL', strength: 'FUE', health: 'VIDA', armor: 'ARM', coinsx2: 'x2$', bonkchanti: 'BONK', otarin: 'OTA', guille: 'GUI', nico: 'NICO' };
 export function boostLabel(key) {
   if (key !== 'mine') return (BOOST_OPTIONS[key] || BOOST_OPTIONS.none).label;
   const on = Object.entries(getActiveBoosts()).filter(([, v]) => v).map(([k]) => SHORT[k] || k);
@@ -84,7 +86,7 @@ export function getActiveBoosts() {
   return { speed: wallet.items.speed === true, strength: wallet.items.strength === true, health: wallet.items.health === true,
     armor: wallet.items.armor === true, coinsx2: wallet.items.coinsx2 === true,
     bonkchanti: wallet.items.bonkchanti === true, otarin: wallet.items.otarin === true,
-    guille: wallet.items.guille === true };
+    guille: wallet.items.guille === true, nico: wallet.items.nico === true };
 }
 
 export function earnCoins(n) {

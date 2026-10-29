@@ -6,6 +6,7 @@
 //   y le lanza corazones que curan.
 //   Otarin: cubito de hielo volador; dispara bolas de hielo que congelan a los enemigos.
 //   Guille: piloto de carreras; tira meteoritos y tijeras perforantes.
+//   Nico's Power: gatito con la camiseta del Milan; pone un escudo que devuelve las balas.
 import { grid, compose, outline, toCanvas, blit } from './spriteEngine.js';
 
 const PALETTE = {
@@ -318,5 +319,89 @@ export function drawMeteor(ctx, m, G, boom = false) {
   gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.4, '#ffb02e'); gr.addColorStop(1, '#e0261e');
   ctx.fillStyle = gr;
   ctx.beginPath(); ctx.arc(fx, fy, 16, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// ---------- NICO'S POWER: gatito blanco cuadrado con la camiseta rojinegra del Milan ----------
+// Como en el primer Salvando Otare: cuerpo blanco con orejitas, ojos negros con brillo, nariz y mejillas
+// rosadas, boca de "3", camiseta a rayas rojas y negras, patitas y colita. Su poder es morado.
+const NICO_PAL = { W: '#ffffff', w: '#e6e6ee', k: '#1a1a22', p: '#ffb3c0', P: '#ff8fae', r: '#d6001c', R: '#8e0013', m: '#b07050' };
+const NICO_GRID = [
+  '.WW......WW...',
+  '.WWW....WWW...',
+  'WWWWWWWWWWWW..',
+  'WWWWWWWWWWWW..',
+  'WWkkWWWWkkWW..',
+  'WWkWWWWWkWWW..',
+  'WPWWWppWWWPW..',
+  'WWWWWmmWWWWW..',
+  'wWWWWWWWWWWw..',
+  'rrkrrkrrkrrkWW',
+  'rrkrrkrrkrrk.W',
+  'RRkRRkRRkRRk..',
+  '.WW......WW...',
+  '.ww......ww...'
+];
+let nicoImg = null;
+function nicoImage() {
+  if (nicoImg) return nicoImg;
+  const c = document.createElement('canvas');
+  c.width = NICO_GRID[0].length + 2; c.height = NICO_GRID.length + 2;
+  const g = c.getContext('2d');
+  g.fillStyle = '#120e1c';   // contorno oscuro de 1 px
+  NICO_GRID.forEach((row, y) => [...row].forEach((ch, x) => { if (ch !== '.') g.fillRect(x, y, 3, 3); }));
+  NICO_GRID.forEach((row, y) => [...row].forEach((ch, x) => { if (ch !== '.') { g.fillStyle = NICO_PAL[ch]; g.fillRect(x + 1, y + 1, 1, 1); } }));
+  return (nicoImg = c);
+}
+
+// n: { x, y (centro), facing, castT } · time: reloj de la partida
+export function drawNico(ctx, n, time) {
+  const bob = Math.sin(time * 3.1 + 4) * 4;
+  const S = 2, img = nicoImage(), w = img.width * S, h = img.height * S;
+  const x = Math.round(n.x - w / 2), y = Math.round(n.y - h / 2 + bob);
+  ctx.save();
+  const casting = time - (n.castT ?? -9) < 0.35;
+  ctx.shadowColor = '#a020f0'; ctx.shadowBlur = casting ? 22 : 10;   // aura morada (más fuerte al lanzar)
+  ctx.imageSmoothingEnabled = false;
+  if (n.facing < 0) { ctx.translate(x + w, y); ctx.scale(-1, 1); ctx.drawImage(img, 0, 0, w, h); }
+  else ctx.drawImage(img, x, y, w, h);
+  ctx.restore();
+  ctx.font = '8px "Press Start 2P", monospace';
+  const label = 'Nico', lx = Math.round(n.x - ctx.measureText(label).width / 2), ly = y - 6;
+  ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(12,10,24,0.9)';
+  ctx.strokeText(label, lx, ly);
+  ctx.fillStyle = '#d08bff'; ctx.fillText(label, lx, ly);
+}
+
+// Bola morada de Nico (también las balas que rebota el escudo, más pequeñas)
+export function drawNicoOrb(ctx, o, time, r = 9) {
+  ctx.save();
+  ctx.translate(Math.round(o.x), Math.round(o.y));
+  ctx.shadowColor = '#a020f0'; ctx.shadowBlur = 14;
+  const g = ctx.createRadialGradient(0, 0, 1, 0, 0, r);
+  g.addColorStop(0, '#ffffff'); g.addColorStop(0.45, '#c46bff'); g.addColorStop(1, '#6a10b0');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, r + Math.sin(time * 16) * 0.8, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// Escudo de Nico sobre un jugador: burbuja rojinegra (rayas del Milan) con borde morado; parpadea al acabarse
+export function drawNicoShield(ctx, p, time) {
+  if (p.nicoShield < 0.8 && Math.floor(time * 10) % 2) return;
+  const cx = p.x + p.w / 2, cy = p.y + p.h / 2, R = Math.max(p.w, p.h) * 0.75 + 6;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
+  ctx.globalAlpha = 0.28;
+  for (let i = -4; i <= 4; i++) {
+    ctx.fillStyle = i % 2 ? '#111111' : '#d6001c';
+    ctx.fillRect(cx + i * R / 4 - R / 8, cy - R, R / 4, R * 2);
+  }
+  ctx.restore();
+  ctx.save();
+  ctx.strokeStyle = '#c46bff'; ctx.lineWidth = 3; ctx.shadowColor = '#a020f0'; ctx.shadowBlur = 14;
+  ctx.globalAlpha = 0.85;
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+  ctx.globalAlpha = 0.6; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(cx, cy, R - 4, time * 3, time * 3 + 1.2); ctx.stroke();
   ctx.restore();
 }

@@ -7,7 +7,7 @@ import { FOOD_TYPES, FOOD_LIFETIME, FOOD_SPAWN_FIRST, FOOD_SPAWN_INTERVAL, FOOD_
   randomFoodKind, drawFood, drawFloatText } from './food.js';
 import { drawPlayer } from './playerSprites.js';
 import { drawEnemy, drawPill, drawEnergyBall, HAS_SPRITE } from './enemySprites.js';
-import { drawBonkChanti, drawHeartOrb, drawOtarin, drawIceShot, drawFrozen, drawGuille, drawScissors, drawMeteor } from './ayudantes.js';
+import { drawBonkChanti, drawHeartOrb, drawOtarin, drawIceShot, drawFrozen, drawGuille, drawScissors, drawMeteor, drawNico, drawNicoOrb, drawNicoShield } from './ayudantes.js';
 import { drawBackdrop, drawGround, drawPlatform } from './mapa.js';
 
 let canvas, ctx, loopHandle, resizeObserver;
@@ -28,6 +28,8 @@ let guille = null;     // ayudante Guille (objeto de la TIENDA), o null
 let scissors = [];     // sus tijeras (van rectas y atraviesan enemigos)
 let meteors = [];      // meteoritos avisados que van a caer
 let booms = [];        // explosiones de meteorito (solo dibujo)
+let nico = null;       // ayudante Nico's Power (objeto de la TIENDA), o null
+let nicoOrbs = [];     // bolas moradas que ponen el escudo
 let world = { 
   gravity: 1800, 
   groundOffset: 80,
@@ -358,6 +360,9 @@ function setupPlayers(canvasW, canvasH) {
   // ayudante Guille: aparece encima de los dos
   guille = boosts.guille ? { x: players[0].x + 60, y: players[0].y - 60, facing: 1, meteorCd: GUILLE.firstMeteor, scissorsCd: GUILLE.firstScissors, castT: null, throwT: null } : null;
   scissors = []; meteors = []; booms = [];
+  // ayudante Nico's Power: aparece junto a Jhoabxi
+  nico = boosts.nico ? { x: players[1].x - 30, y: players[1].y - 40, facing: 1, cooldown: NICO.firstOrb, castT: null } : null;
+  nicoOrbs = [];
   runCoins = 0;
   simStats = newSimStats();
   bullets = []; enemyBullets = []; enemies = [];
@@ -445,7 +450,7 @@ function anyPlayerAlive() { return players.some(p => p.alive && p.hp > 0); }
 function newSimStats() {
   return {
     time: 0, kills: [0, 0], damage: [{ melle: 0, bala: 0, pinchos: 0 }, { melle: 0, bala: 0, pinchos: 0 }],
-    healed: [0, 0], food: { spawned: 0, eaten: 0, expired: 0 }, freezes: 0, guilleKills: 0
+    healed: [0, 0], food: { spawned: 0, eaten: 0, expired: 0 }, freezes: 0, guilleKills: 0, shields: 0, reflects: 0
   };
 }
 // ARMADURA (objeto de la TIENDA): los golpes y disparos enemigos hacen menos daño (los pinchos no)
@@ -483,12 +488,13 @@ function resizeCanvasInternal() {
 }
 
 function shiftWorldY(dy) {
-  for (const list of [players, enemies, bullets, enemyBullets, platforms, foods, floatTexts, heartOrbs, iceShots, meteors, booms, scissors]) {
+  for (const list of [players, enemies, bullets, enemyBullets, platforms, foods, floatTexts, heartOrbs, iceShots, meteors, booms, scissors, nicoOrbs]) {
     for (const o of list) o.y += dy;
   }
   if (helper) helper.y += dy;
   if (otarin) otarin.y += dy;
   if (guille) guille.y += dy;
+  if (nico) nico.y += dy;
 }
 
 // Jefe: fase de furia al llegar a esta fracción de vida
@@ -536,7 +542,8 @@ function updateEnemies(dt) {
         if (bestDist > e.attackRange - 6) e.targetVx = chaseDir(e, target) * e.speed * 1.3; // el más rápido: persigue a fondo
         else {
           if ((e.attackCooldown || 0) <= 0) {
-            if (!target.parryInvul) { const hpBefore = target.hp; target.hp = Math.max(0, target.hp - ENEMY_TYPES.melle.attackDamage * e.dmgMul * armorFactor()); addDamage(players.indexOf(target), 'melle', hpBefore - target.hp); target.hitFlash = 0.12; playSfx('hurt'); target.regenTimer = target.regenDelay; }
+            if (nicoShielded(target)) { playSfx('block'); e.vx = -dir * 120; }   // escudo de Nico: no le hace nada
+            else if (!target.parryInvul) { const hpBefore = target.hp; target.hp = Math.max(0, target.hp - ENEMY_TYPES.melle.attackDamage * e.dmgMul * armorFactor()); addDamage(players.indexOf(target), 'melle', hpBefore - target.hp); target.hitFlash = 0.12; playSfx('hurt'); target.regenTimer = target.regenDelay; }
             else { playSfx('block'); e.hp -= 8; e.flash = 0.12; e.vx = -dir * 90; e.lastHitBy = players.indexOf(target); if (e.hp <= 0) killEnemy(e); }
             e.attackCooldown = 0.9;
           }
@@ -1067,6 +1074,82 @@ function updateGuille(dt, W) {
   }
 }
 
+// --- Ayudante Nico's Power (dibujo en ayudantes.js) ---
+// Como en el primer Salvando Otare: cuando un jugador se queda con poca vida, Nico (gatito blanco con la
+// camiseta del Milan) le lanza una bola morada que le pone un ESCUDO: mientras dura no le hacen daño los
+// golpes ni las balas, y las balas REBOTAN contra el enemigo que las disparó (¡JoJo's reference!).
+// En el primer juego duraba 5 s y se repetía a los 3 s (casi inmortal); aquí dura menos y tarda más en volver.
+const NICO = {
+  speed: 300,        // vuela (px/s)
+  lowHp: 0.25,       // protege al que baja de esta fracción de vida
+  orbSpeed: 520,     // la bola persigue al jugador
+  orbLife: 2.0,
+  shield: 3.0,       // segundos de escudo
+  cooldown: 14.0,    // segundos entre bolas
+  firstOrb: 1.0,
+  reflectSpeed: 420  // velocidad de las balas rebotadas
+};
+
+// ¿El escudo de Nico para este golpe? (lo usan el puñetazo del Melle y las balas enemigas)
+const nicoShielded = p => (p.nicoShield || 0) > 0;
+
+// Bala enemiga contra un jugador con escudo: vuelve contra quien la disparó (o hacia fuera) y ahora daña
+// a los enemigos; la kill es del jugador protegido
+function reflectBullet(eb, p, pi) {
+  const px = p.x + p.w / 2, py = p.y + p.h / 2;
+  const owner = enemies.find(e => e.alive && e.id === eb.ownerId);
+  let dx, dy;
+  if (owner) { dx = owner.x + owner.w / 2 - px; dy = owner.y + owner.h / 2 - py; }
+  else { dx = eb.x - px; dy = eb.y - py; }
+  const d = Math.hypot(dx, dy) || 1;
+  bullets.push({
+    x: px + dx / d * (p.w / 2 + 10), y: py + dy / d * (p.h / 2 + 10), w: eb.w, h: eb.h,
+    vx: dx / d * NICO.reflectSpeed, vy: dy / d * NICO.reflectSpeed,
+    damage: eb.value, life: 2.5, owner: pi, type: 'player', style: 'nico'
+  });
+  playSfx('reflect');
+  simStats.reflects++;
+}
+
+function updateNico(dt, W) {
+  // escudos de los jugadores
+  for (const p of players) if (p.nicoShield > 0) p.nicoShield = Math.max(0, p.nicoShield - dt);
+  if (!nico) return;
+  const alive = players.filter(p => p.alive);
+  if (!alive.length) return;
+  // a quién cuida: el vivo con menos vida (en proporción)
+  const target = alive.reduce((b, p) => (p.hp / p.maxHp < b.hp / b.maxHp ? p : b));
+  // flota por encima y detrás de él, sin salirse de la pantalla
+  const cx = target.x + target.w / 2;
+  const wantX = Math.max(world.cameraX + 24, Math.min(world.cameraX + W - 24, cx - target.facing * 48));
+  const wantY = target.y - 40;
+  const dx = wantX - nico.x, dy = wantY - nico.y, d = Math.hypot(dx, dy);
+  if (d > 1) { const step = Math.min(d, NICO.speed * dt); nico.x += dx / d * step; nico.y += dy / d * step; }
+  if (Math.abs(cx - nico.x) > 4) nico.facing = Math.sign(cx - nico.x);
+  nico.cooldown -= dt;
+  if (nico.cooldown <= 0 && target.hp / target.maxHp <= NICO.lowHp && !nicoShielded(target) && !nicoOrbs.some(o => o.target === target)) {
+    nicoOrbs.push({ x: nico.x, y: nico.y, target, life: NICO.orbLife });
+    nico.cooldown = NICO.cooldown;
+    nico.castT = gameTime;
+    playSfx('nicoOrb');
+  }
+  // bolas moradas: persiguen a su jugador y le ponen el escudo
+  for (let i = nicoOrbs.length - 1; i >= 0; i--) {
+    const o = nicoOrbs[i], t = o.target;
+    o.life -= dt;
+    if (o.life <= 0 || !t.alive) { nicoOrbs.splice(i, 1); continue; }
+    const ox = t.x + t.w / 2 - o.x, oy = t.y + t.h * 0.45 - o.y, od = Math.hypot(ox, oy) || 1;
+    o.x += ox / od * NICO.orbSpeed * dt; o.y += oy / od * NICO.orbSpeed * dt;
+    if (od < 20) {
+      t.nicoShield = NICO.shield;
+      floatTexts.push({ x: t.x + t.w / 2 - 22, y: t.y - 14, text: '¡ESCUDO!', color: '#d08bff', life: 1.0 });
+      playSfx('shield');
+      simStats.shields++;
+      nicoOrbs.splice(i, 1);
+    }
+  }
+}
+
 // PHYSICS: movimientos + manejo de ataques, collisions and regen
 function physicsUpdate(dt) {
   if (!hasWorld()) return;
@@ -1112,7 +1195,8 @@ function physicsUpdate(dt) {
         const p = players[pi];
         if (!p.alive) continue;
         if (rectsOverlap(eb, { x: p.x, y: p.y, w: p.w, h: p.h })) {
-          if (!p.parryInvul) {
+          if (nicoShielded(p)) reflectBullet(eb, p, pi);   // escudo de Nico: la bala rebota
+          else if (!p.parryInvul) {
             const hpBefore = p.hp;
             p.hp = Math.max(0, p.hp - eb.value * armorFactor());
             addDamage(pi, 'bala', hpBefore - p.hp);
@@ -1339,7 +1423,7 @@ function physicsUpdate(dt) {
     }
   }); // end players.forEach
 
-  if (!gameOver) { updateFoods(dt); updateHelper(dt, W); updateOtarin(dt, W); updateGuille(dt, W); }
+  if (!gameOver) { updateFoods(dt); updateHelper(dt, W); updateOtarin(dt, W); updateGuille(dt, W); updateNico(dt, W); }
   updateCamera(W);
 
   // advance rounds when enemies dead
@@ -1470,7 +1554,7 @@ function render() {
   });
 
   // bullets
-  bullets.forEach(b => { ctx.fillStyle = '#ffdca3'; ctx.fillRect(Math.round(b.x - b.w/2), Math.round(b.y - b.h/2), b.w, b.h); });
+  bullets.forEach(b => { if (b.style === 'nico') { drawNicoOrb(ctx, b, gameTime, 5); return; } ctx.fillStyle = '#ffdca3'; ctx.fillRect(Math.round(b.x - b.w/2), Math.round(b.y - b.h/2), b.w, b.h); });
   enemyBullets.forEach(eb => {
     if (eb.kind === 'heal') { drawPill(ctx, eb, gameTime); return; } // pastilla del Curados
     if (eb.style === 'portal') { drawEnergyBall(ctx, eb, gameTime); return; }    // disparo del Fuerte
@@ -1498,6 +1582,7 @@ function render() {
     if (boosts.armor && p.alive) { ctx.save(); ctx.shadowColor = '#c9d4de'; ctx.shadowBlur = 12 + Math.sin(gameTime * 4) * 3; }
     drawPlayer(ctx, p, { kind, time: gameTime, aim, shooting: kind === 'jhoabxi' && p.shootingCooldown > JHOABXI_SHOOT_CD - 0.07 });
     if (boosts.armor && p.alive) ctx.restore();
+    if (p.alive && p.nicoShield > 0) drawNicoShield(ctx, p, gameTime);   // escudo de Nico
 
     // golpe de Lanzziano: estela blanca delante del puño
     if (p.alive && p.meleeTimer > MELEE.duration * 0.4) {
@@ -1536,6 +1621,9 @@ function render() {
   booms.forEach(b => drawMeteor(ctx, b, GUILLE, true));
   if (guille) drawGuille(ctx, guille, gameTime);
   scissors.forEach(sc => drawScissors(ctx, sc));
+  // ayudante Nico's Power y sus bolas
+  if (nico) drawNico(ctx, nico, gameTime);
+  nicoOrbs.forEach(o => drawNicoOrb(ctx, o, gameTime));
 
   floatTexts.forEach(t => drawFloatText(ctx, t));
 
@@ -1566,7 +1654,7 @@ function render() {
     ctx.fillStyle = '#ffd24a'; ctx.font = '12px "Press Start 2P", monospace';
     outlinedText(ctx, `${getCoins()}`, hudX + 24, cy + 12);
     if (runCoins > 0) { ctx.fillStyle = '#fff3b0'; ctx.font = '9px "Press Start 2P", monospace'; outlinedText(ctx, `+${runCoins} esta partida`, hudX + 110, cy + 11); }
-    const active = [['speed', 'x2 VEL'], ['strength', 'x2 FUE'], ['health', 'x2 VIDA'], ['armor', 'ARMADURA'], ['coinsx2', 'x2 MONEDAS'], ['bonkchanti', 'BONKCHANTI'], ['otarin', 'OTARIN'], ['guille', 'GUILLE']].filter(([k]) => boosts[k]).map(([, t]) => t);
+    const active = [['speed', 'x2 VEL'], ['strength', 'x2 FUE'], ['health', 'x2 VIDA'], ['armor', 'ARMADURA'], ['coinsx2', 'x2 MONEDAS'], ['bonkchanti', 'BONKCHANTI'], ['otarin', 'OTARIN'], ['guille', 'GUILLE'], ['nico', 'NICO']].filter(([k]) => boosts[k]).map(([, t]) => t);
     if (active.length) { ctx.fillStyle = '#ff6bec'; ctx.font = '8px "Press Start 2P", monospace'; outlinedText(ctx, active.join('  '), hudX, cy + 30); }
   }
 
@@ -1739,7 +1827,7 @@ export function stop() {
   else window.removeEventListener('resize', resizeCanvasInternal);
   if (canvas) canvas.removeEventListener('click', handleGameOverClick);
   gameOver = false; gameOverType = ''; lastGroundY = null;
-  canvas = null; ctx = null; players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; helper = null; heartOrbs = []; otarin = null; iceShots = []; guille = null; scissors = []; meteors = []; booms = []; onResizeCallback = null; resetInput();
+  canvas = null; ctx = null; players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; helper = null; heartOrbs = []; otarin = null; iceShots = []; guille = null; scissors = []; meteors = []; booms = []; nico = null; nicoOrbs = []; onResizeCallback = null; resetInput();
 }
 // --- Modo predicción ---
 // Corre una partida de simulación IA completa sin canvas ni requestAnimationFrame: física con dt fijo
@@ -1804,11 +1892,13 @@ export function runHeadless({ seed = 1, maxSeconds = 600, onProgress, isCancelle
         food: { ...simStats.food },
         freezes: simStats.freezes,
         guilleKills: simStats.guilleKills,
+        shields: simStats.shields,
+        reflects: simStats.reflects,
         modeFrames
       };
       headlessView = null; headlessBusy = false; simulationMode = false; aiParams = null; boosts = {}; difficulty = 'normal';
       gameOver = false; gameOverType = '';
-      players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; helper = null; heartOrbs = []; otarin = null; iceShots = []; guille = null; scissors = []; meteors = []; booms = [];
+      players = []; enemies = []; bullets = []; enemyBullets = []; foods = []; floatTexts = []; helper = null; heartOrbs = []; otarin = null; iceShots = []; guille = null; scissors = []; meteors = []; booms = []; nico = null; nicoOrbs = [];
       resolve(result);
     };
     const chunk = () => {

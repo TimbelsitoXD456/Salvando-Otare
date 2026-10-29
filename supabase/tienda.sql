@@ -34,6 +34,7 @@ as $$
     when 'bonkchanti' then 1250 -- ayudante BonkChanti
     when 'otarin'   then 1850  -- ayudante Otarin
     when 'guille'   then 2500  -- ayudante Guille
+    when 'nico'     then 6250  -- ayudante Nico's Power
   end;
 $$;
 

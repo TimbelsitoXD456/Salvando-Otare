@@ -27,6 +27,7 @@ export const MISSIONS = [
   { id: 'acurar',    name: 'A Curar',                    desc: 'Compra a BonkChanti.',                           kind: 'bonkchanti', goal: 1,   reward: 490 },
   { id: 'hacefrio',  name: 'Hace Frio en la Cima',       desc: 'Compra a Otarin.',                               kind: 'otarin',     goal: 1,   reward: 700 },
   { id: 'meteorito', name: 'A Oliver le Callo un Meteorito', desc: 'Compra a Guille.',                         kind: 'guillebuy',  goal: 1,   reward: 1111 },
+  { id: 'jojo',      name: "JOJO's REFERENCE!",          desc: 'Compra a Nico.',                                 kind: 'nicobuy',    goal: 1,   reward: 1456 },
   { id: 'loteria',   name: 'LOTERIA',                    desc: 'Compra TODA LA TIENDA.',                         kind: 'items',     goal: Object.keys(ITEMS).length, reward: 2000 }
 ];
 
@@ -44,6 +45,7 @@ function current(kind) {
     case 'bonkchanti': return 'bonkchanti' in getItems() ? 1 : 0;
     case 'otarin': return 'otarin' in getItems() ? 1 : 0;
     case 'guillebuy': return 'guille' in getItems() ? 1 : 0;
+    case 'nicobuy': return 'nico' in getItems() ? 1 : 0;
     default: return 0;
   }
 }
