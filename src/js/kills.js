@@ -47,7 +47,8 @@ export function replaceBestRound(round) {
 }
 
 // ---------- modo SUPERVIVENCIA y victorias (para las misiones) ----------
-const BEST_SURVIVAL_KEY = 'salvandoOtare.bestSurvival';  // ronda más alta en supervivencia
+const BEST_SURVIVAL_KEY = 'salvandoOtare.bestSurvival';  // ronda más alta en supervivencia (misiones)
+const SURVIVAL_HARD_KEY = 'salvandoOtare.survivalHard';  // ...jugando en DIFÍCIL (lo único que cuenta para el ranking)
 const WINS_KEY = 'salvandoOtare.wins';                   // veces que se venció al jefe en modo normal
 const HARD_WINS_KEY = 'salvandoOtare.hardWins';          // ...de ellas, en dificultad DIFÍCIL
 
@@ -55,12 +56,16 @@ const readInt = key => { try { return Math.max(0, Math.floor(Number(localStorage
 const writeInt = (key, n) => { try { localStorage.setItem(key, String(Math.max(0, Math.floor(Number(n) || 0)))); } catch (e) {} };
 
 export const getBestSurvival = () => readInt(BEST_SURVIVAL_KEY);
-export function recordSurvivalRound(round) {
-  if (round <= getBestSurvival()) return;
-  writeInt(BEST_SURVIVAL_KEY, round);
-  changed();
+export const getBestSurvivalHard = () => readInt(SURVIVAL_HARD_KEY);
+// hard: la partida era en DIFÍCIL (cuenta también para el ranking de supervivencia)
+export function recordSurvivalRound(round, hard = false) {
+  let better = false;
+  if (round > getBestSurvival()) { writeInt(BEST_SURVIVAL_KEY, round); better = true; }
+  if (hard && round > getBestSurvivalHard()) { writeInt(SURVIVAL_HARD_KEY, round); better = true; }
+  if (better) changed();
 }
 export const replaceBestSurvival = n => writeInt(BEST_SURVIVAL_KEY, n);
+export const replaceBestSurvivalHard = n => writeInt(SURVIVAL_HARD_KEY, n);
 
 export const getWins = () => readInt(WINS_KEY);
 export function addWin() { writeInt(WINS_KEY, getWins() + 1); changed(); }

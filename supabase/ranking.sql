@@ -8,7 +8,8 @@
 -- ============================================================================================
 
 -- (la ronda de supervivencia la crea misiones.sql; por si este se ejecuta antes)
-alter table public.progress add column if not exists best_survival int not null default 0;
+-- El ranking de supervivencia solo cuenta las partidas en DIFÍCIL (best_survival_hard)
+alter table public.progress add column if not exists best_survival_hard int not null default 0;
 
 create or replace function public.global_ranks(top_n int default 10)
 returns jsonb
@@ -29,7 +30,7 @@ begin
            case when jsonb_typeof(g.kills->'Jhoabxi') = 'number'
                 then least(greatest(floor((g.kills->>'Jhoabxi')::numeric), 0), 10000000)::bigint else 0 end as jhoabxi,
            g.capocoins::bigint as coins,
-           g.best_survival::bigint as survival
+           g.best_survival_hard::bigint as survival
       from progress g
       join profiles p on p.id = g.user_id
   ),

@@ -1,13 +1,13 @@
 // ranking.js - pantalla GLOBAL RANKS: los mejores de todos los jugadores con cuenta (Supabase,
 // supabase/ranking.sql). Cuatro tablas: más kills con Lanzziano, más kills con Jhoabxi, más CapoCoins
-// y ronda más alta en supervivencia.
+// y ronda más alta en supervivencia (solo jugando en DIFÍCIL).
 import { fetchRanks, currentUser } from './cloud.js';
 
 const TABS = {
   lanzziano: { title: 'MOST KILLS · LANZZIANO', unit: 'kills' },
   jhoabxi:   { title: 'MOST KILLS · JHOABXI',   unit: 'kills' },
   coins:     { title: 'MÁS CAPOCOINS',          unit: 'CapoCoins' },
-  survival:  { title: 'SUPERVIVENCIA · RONDA',  unit: 'ronda' }
+  survival:  { title: 'SUPERVIVENCIA DIFÍCIL · RONDA', unit: 'ronda' }
 };
 
 let tab = 'lanzziano';

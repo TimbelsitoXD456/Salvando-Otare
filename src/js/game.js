@@ -1465,7 +1465,7 @@ function triggerVictory() { if (gameOver) return; gameOver = true; gameOverType 
 // 'runFinished' avisa a cloud.js para subir las CapoCoins ganadas
 function saveBestRound() {
   if (simulationMode) return;
-  if (survival) recordSurvivalRound(currentRound);
+  if (survival) recordSurvivalRound(currentRound, difficulty === 'hard');   // el ranking solo cuenta DIFÍCIL
   else {
     recordRound(currentRound);
     if (gameOverType === 'victory') { addWin(); if (difficulty === 'hard') addHardWin(); }

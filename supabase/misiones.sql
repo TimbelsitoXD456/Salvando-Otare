@@ -12,12 +12,13 @@ alter table public.progress add column if not exists best_survival int   not nul
 alter table public.progress add column if not exists wins          int   not null default 0;  -- veces que venció al jefe (modo normal)
 alter table public.progress add column if not exists missions      jsonb not null default '{}'::jsonb; -- {"lanz40": "fecha"} = cobrada
 alter table public.progress add column if not exists hard_wins     int   not null default 0;  -- victorias en DIFÍCIL (desbloquean supervivencia)
+alter table public.progress add column if not exists best_survival_hard int not null default 0;  -- ronda más alta en supervivencia DIFÍCIL (ranking)
 
 -- El juego puede escribir directamente estas columnas (como antes, más best_survival y wins);
 -- capocoins, items y missions solo cambian con las funciones del servidor.
 revoke insert, update on public.progress from anon, authenticated;
-grant insert (user_id, kills, best_round, trained_ai, updated_at, best_survival, wins, hard_wins) on public.progress to authenticated;
-grant update (user_id, kills, best_round, trained_ai, updated_at, best_survival, wins, hard_wins) on public.progress to authenticated;
+grant insert (user_id, kills, best_round, trained_ai, updated_at, best_survival, wins, hard_wins, best_survival_hard) on public.progress to authenticated;
+grant update (user_id, kills, best_round, trained_ai, updated_at, best_survival, wins, hard_wins, best_survival_hard) on public.progress to authenticated;
 
 -- Catálogo de misiones: qué se mide, cuánto hace falta y cuántas CapoCoins da
 create or replace function public.mission_info(mid text, out kind text, out goal int, out reward int)
