@@ -1,0 +1,7 @@
+# Configuración mínima para desplegar las Edge Functions del juego con el CLI de Supabase.
+# (Las tablas se crean con los .sql de esta carpeta desde el SQL Editor, como siempre.)
+project_id = "salvando-otare"
+
+# Voz de IA para SIMULACIONES → DESCARGAR AUDIO (solo admin; ver functions/voz-jarvis/index.ts)
+[functions.voz-jarvis]
+verify_jwt = true

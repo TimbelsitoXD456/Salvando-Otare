@@ -51,6 +51,23 @@ export function currentUser() {
   return { email: session.user.email, username: profile?.username || session.user.user_metadata?.username || '' };
 }
 
+// ---------- voz de IA (solo admin) ----------
+// Pide a la Edge Function voz-jarvis (supabase/functions/voz-jarvis) que lea el texto con la voz de Gemini.
+// Devuelve el audio PCM 16 bits mono a 24 kHz (ArrayBuffer). La API key de Gemini se queda en el servidor.
+export const VOICE_SAMPLE_RATE = 24000;
+export async function generateVoice({ text, voice, tone }) {
+  if (!sb || !session) throw new Error('Inicia sesión con la cuenta admin.');
+  const { data, error } = await sb.functions.invoke('voz-jarvis', { body: { text, voice, tone } });
+  if (error) {
+    let msg = error.message;
+    try { const body = await error.context?.json?.(); if (body?.error) msg = body.error; } catch (e) {}
+    if (/Failed to send|fetch|NetworkError|404/i.test(msg)) msg = 'No se encontró la función voz-jarvis: ¿ya la desplegaste en Supabase?';
+    throw new Error(msg);
+  }
+  if (!(data instanceof Blob)) throw new Error(data?.error || 'Respuesta inesperada del servidor.');
+  return data.arrayBuffer();
+}
+
 // ---------- arranque ----------
 export async function initCloud() {
   try {

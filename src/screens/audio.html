@@ -1,0 +1,40 @@
+<!-- Pantalla DESCARGAR AUDIO (solo admin): menu.js la carga dentro de #screen-audio y src/js/vozIA.js la controla -->
+<h2>DESCARGAR AUDIO</h2>
+<p class="pred-help">Escribe un texto y te lo devuelvo leído con voz de IA (Gemini), en .mp3.<br>Charon es la voz de J.A.R.V.I.S.</p>
+
+<label class="voice-field">
+  <span>Texto <b class="voice-count">0 / 4000</b></span>
+  <textarea class="voice-text" maxlength="4000" rows="6" placeholder="¡Esperen! ¿Ya pasó un año?..."></textarea>
+</label>
+
+<div class="pred-count voice-voices" role="group" aria-label="Voz">
+  <span>Voz:</span>
+  <button class="menu-btn voice-opt selected" data-action="voice-pick" data-voice="Charon" title="La voz de J.A.R.V.I.S.">JARVIS</button>
+  <button class="menu-btn voice-opt" data-action="voice-pick" data-voice="Puck" title="Alegre">PUCK</button>
+  <button class="menu-btn voice-opt" data-action="voice-pick" data-voice="Fenrir" title="Enérgica">FENRIR</button>
+  <button class="menu-btn voice-opt" data-action="voice-pick" data-voice="Orus" title="Firme">ORUS</button>
+  <button class="menu-btn voice-opt" data-action="voice-pick" data-voice="Kore" title="Voz femenina firme">KORE</button>
+  <button class="menu-btn voice-opt" data-action="voice-pick" data-voice="Aoede" title="Voz femenina suave">AOEDE</button>
+</div>
+
+<label class="voice-field">
+  <span>Tono (opcional)</span>
+  <input class="voice-tone" type="text" maxlength="120" placeholder="emocionado, misterioso, como narrador de tráiler...">
+</label>
+
+<div class="actions">
+  <button class="menu-btn primary voice-run" data-action="voice-run">GENERAR AUDIO</button>
+</div>
+
+<p class="pred-status voice-status" aria-live="polite"></p>
+
+<div class="voice-result" hidden>
+  <audio class="voice-player" controls></audio>
+  <div class="actions">
+    <a class="menu-btn voice-download" download="voz.mp3">DESCARGAR .MP3</a>
+  </div>
+</div>
+
+<div class="actions">
+  <button class="menu-btn" data-action="back-sims">Volver</button>
+</div>

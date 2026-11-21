@@ -2,6 +2,7 @@
 import { getKills } from './kills.js';
 import { handlePredictionAction, cancelPrediction, refreshPrediction } from './prediccion.js';
 import { handleTrainingAction, cancelTraining, refreshTraining } from './entrenamiento.js';
+import { handleVoiceAction, refreshVoice } from './vozIA.js';
 import { getTrained } from './iaEntrenada.js';
 import { startMenuBackground } from './menuBackground.js';
 import { initCloud, onCloudChange, isAdmin, currentUser, isRecovering } from './cloud.js';
@@ -32,6 +33,7 @@ const Screens = {
   KILLS: 'screen-kills',
   PREDICTION: 'screen-prediccion',
   TRAINING: 'screen-entrenamiento',
+  VOICE: 'screen-audio',
   ACCOUNT: 'screen-cuenta',
   SHOP: 'screen-tienda',
   SETTINGS: 'screen-settings',
@@ -142,7 +144,7 @@ const app = {
     const hint = document.querySelector('.acct-hint');
     if (hint) hint.textContent = user ? `Conectado como ${user.username || user.email}` : '';
     // sin permiso de admin no se puede estar en las pantallas de simulación
-    if (!admin && [Screens.SIMS, Screens.PREDICTION, Screens.TRAINING].includes(this.currentScreen)) this.showScreen(Screens.MENU);
+    if (!admin && [Screens.SIMS, Screens.PREDICTION, Screens.TRAINING, Screens.VOICE].includes(this.currentScreen)) this.showScreen(Screens.MENU);
     if (this.currentScreen === Screens.MENU) { this.updateFocusable(); this.focusedIndex = Math.min(this.focusedIndex, this.buttons.length - 1); }
     // llegó desde el enlace de "olvidé mi contraseña": abrir CUENTA para poner la nueva
     if (isRecovering() && this.currentScreen !== Screens.ACCOUNT && this.currentScreen !== Screens.GAME) this.showAccount();
@@ -303,6 +305,15 @@ const app = {
       case 'train':
         if (!isAdmin()) break;
         this.showLoadedScreen(Screens.TRAINING, 'src/screens/entrenamiento.html', refreshTraining);
+        break;
+      case 'voice':
+        // DESCARGAR AUDIO: texto → voz de IA en .mp3 (vozIA.js + supabase/functions/voz-jarvis)
+        if (!isAdmin()) break;
+        this.showLoadedScreen(Screens.VOICE, 'src/screens/audio.html', refreshVoice);
+        break;
+      case 'voice-pick':
+      case 'voice-run':
+        handleVoiceAction(action, btn, document.getElementById(Screens.VOICE));
         break;
       case 'train-gens':
       case 'train-boost':
