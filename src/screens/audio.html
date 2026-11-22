@@ -35,6 +35,32 @@
   </div>
 </div>
 
+<!-- MODO LOTE: muchas frases de una vez → un .zip con todos los .mp3 -->
+<h2 class="voice-batch-title">MODO LOTE</h2>
+<p class="pred-help">Una frase por línea: <b>nombre | texto | tono</b> (el tono es opcional).<br>Ejemplo: N. 1 | ¡Hola a todos! | emocionado<br>Usa la voz elegida arriba. Las líneas con huecos [ ] se saltan.</p>
+
+<label class="voice-field">
+  <span>Lote <b class="voice-batch-count">0 frases</b></span>
+  <textarea class="voice-batch" rows="8" placeholder="N. 1 | ¿Puedes multiplicar 36 por 11 en dos segundos? Yo sí. | retador&#10;N. 2 | Separa el 36... | explicando con calma"></textarea>
+</label>
+
+<div class="actions">
+  <button class="menu-btn primary voice-batch-run" data-action="voice-batch-run">GENERAR TODO</button>
+  <button class="menu-btn voice-batch-stop" data-action="voice-batch-stop" hidden>DETENER</button>
+</div>
+
+<div class="pred-progress voice-batch-progress" hidden>
+  <div class="pred-bar"><div class="pred-bar-fill voice-batch-fill"></div></div>
+  <p class="pred-status voice-batch-status" aria-live="polite"></p>
+</div>
+
+<div class="voice-batch-result" hidden>
+  <ul class="voice-batch-log"></ul>
+  <div class="actions">
+    <a class="menu-btn voice-batch-download" download="audios.zip">DESCARGAR .ZIP</a>
+  </div>
+</div>
+
 <div class="actions">
   <button class="menu-btn" data-action="back-sims">Volver</button>
 </div>

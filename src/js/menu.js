@@ -313,6 +313,8 @@ const app = {
         break;
       case 'voice-pick':
       case 'voice-run':
+      case 'voice-batch-run':
+      case 'voice-batch-stop':
         handleVoiceAction(action, btn, document.getElementById(Screens.VOICE));
         break;
       case 'train-gens':
